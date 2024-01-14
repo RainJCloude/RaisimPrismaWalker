@@ -167,12 +167,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		command_[0] = v_x;
 		command_[1] = v_y;
 		command_[2] = omega_z;
-		//stettamdanjcnajc 
 	}
-	void iniaaaat() { 
-		int a;
-		char *b = "ncjnc";
-	}     
+    
 	void init() final { 
 	}     
 
