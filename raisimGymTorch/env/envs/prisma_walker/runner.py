@@ -138,7 +138,8 @@ for i in lam:
         for step in range(n_steps): #n_steps 400
             obs = env.observe() #dim 120 (immagino sia (generalized coordinate+njoints)*num_envs)
             action = ppo.act(obs)
-            #print(np.size(action))
+            #print("action: ", action)
+
             reward, dones = env.step(action)
             ppo.step(value_obs=obs, rews=reward, dones=dones)
             done_sum = done_sum + np.sum(dones)

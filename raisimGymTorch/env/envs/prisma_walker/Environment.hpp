@@ -12,19 +12,13 @@
 #include <Eigen/Geometry>
 #include <cmath>
 #include "Eigen/Eigen"
-#include "motors_src/lookup.hpp"
-#include "motors_src/trajectory.hpp"
-
-
-#include "motors_src/group_command.hpp"
-#include "motors_src/group_feedback.hpp"
-#include "motors_src/command.hpp"
 
 #include <cstdlib>
 #include "raisim/World.hpp"
 #include <fstream>
 #include <vector> 
-#include "lookup.hpp"
+#include "lookup.hpp"  //mettendo in target_include_directories il percorso a questo file, sto apposto, bastano i docci apici
+#include "group.hpp"
 #include "../../RaisimGymEnv.hpp"
 #include "raisim/contact/Contact.hpp"
 #if defined(__linux__) || defined(__APPLE__)
@@ -35,7 +29,6 @@
 #include <conio.h>
 #endif
 #include <stdio.h>
-#include "dynamixel_sdk.hpp"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -111,7 +104,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		READ_YAML(int, num_seq, cfg_["num_seq"]);
    		READ_YAML(int, num_seq_vel, cfg_["num_seq_vel"]);
 		READ_YAML(int, max_time, cfg_["max_time"]);  //mu,Step = control_dt /max time
-		float num_step = max_time/control_dt_;
+		num_step = max_time/control_dt_;
 		joint_history_pos_.setZero(3*num_seq);
     	joint_history_vel_.setZero(3*num_seq_vel);
 		current_action_.setZero(3);
@@ -159,7 +152,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		curr_vel_ = 0;
 		curr_imitation_ = 1;
 		keyPoint_(10);
-		
+		curr_index_ = 0;
+		index_imitation_ = 0;
 	}
 
 
@@ -167,8 +161,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 		command_[0] = v_x;
 		command_[1] = v_y;
 		command_[2] = omega_z;
+		std::cout<<"command_vel: "<<command_<<std::endl;
+		
 	}
-    
+
 	void init() final { 
 	}     
 
@@ -200,40 +196,56 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 			m2_pos_=-m2_pos;
 		}
+		
 		m1_traj.close(); 
-		index_imitation_ = 0;
 		previous_contact = 0;
+		auto entry_list = lookup.getEntryList();
+		std::shared_ptr<hebi::Group> group = lookup.getGroupFromNames({"family"}, {"name1", "name2"});
+
+		/*if(num_episode_ > 50 && !fallen_){ //Facendolo partire da subito da stato rand cade subito e sempre
+			std::uniform_int_distribution start_(0,1818);
+			index_imitation_ = start_(gen_);
+
+			gc_init_[7] = m1_pos_(index_imitation_) - start_(gen_)*0.00001;
+			gc_init_[8] = m2_pos_(index_imitation_) - start_(gen_)*0.00001;
+
+		}*/
+		
+		if(fallen_){
+			index_imitation_ = 0;
+			gc_init_[7] = 0.6;
+			gc_init_[8] = 0.6;
+		}
+		fallen_ = false;
 		prisma_walker->setState(gc_init_, gv_init_);
 		updateObservation();
+	
 		NumberIteration_ = 0;
+		offset_ = 1;
+		//Curriculum
+		
+		countForCurriculum_ = 0;
+
 		vel_rew_ = 0;
 		mean_vel_rew_ = 10;
 		swing_penalty_ = 0; //Da usare solo in caso di penalty
 		previous_contact = 1; //Parte da piede a terra e quindi va a 1
+		actual_step_ = 0;
 	}
 	
 
  
 	float step(const Eigen::Ref<EigenVec>& action) final {
 		/// action scaling
-
 		pTarget3_ = action.cast<double>(); //dim=n_joints
 		pTarget3_ = pTarget3_.cwiseProduct(actionStd_);
+		//RSINFO_IF(visualizable_, "Joint actual value: "<<m1_pos_(index_imitation_))
 		actionMean_ << m1_pos_(index_imitation_), m2_pos_(index_imitation_), 0.0;
 		pTarget3_ += actionMean_;
 		pTarget_.tail(nJoints_) << pTarget3_;
 		current_action_ = pTarget3_;
-
-		//if ( gc_[7] - azione_precedente_[0] > azione_precedente_[0] -   ) //se la distanza tra dove sono e dove dovevo andare prima
-		/*pTarget3_ << azione_precedente_[0]-((azione_precedente_[0]+pTarget3_[0])*smoothing_factor_),
-					azione_precedente_[1]-((azione_precedente_[1]+pTarget3_[1])*smoothing_factor_),
-					azione_precedente_[2]-((azione_precedente_[2]-pTarget3_[2])*smoothing_factor_);*/
-
-		//azione_precedente_ << pTarget3_[0], pTarget3_[1] ,pTarget3_[2];
-
        
 		prisma_walker->setPdTarget(pTarget_, vTarget_);
-
 
 		for(int i=0; i< int(control_dt_ / simulation_dt_ + 1e-10); i++){
 			if(server_) server_->lockVisualizationServerMutex();
@@ -241,26 +253,25 @@ class ENVIRONMENT : public RaisimGymEnv {
 			if(server_) server_->unlockVisualizationServerMutex();
 		}
 
-
 		updateObservation(); //Ricordati che va prima di fare tutti i conti
 		prisma_walker->getFrameVelocity(foot_center_, vel_);
 		prisma_walker->getFramePosition(foot_center_, footPosition_);
+	
+
+		prisma_walker->getFrameVelocity(foot_sx_, vel_sx_);
 		prisma_walker->getFramePosition(foot_sx_, footPosition_Sx_);
+
+		prisma_walker->getFrameVelocity(foot_dx_, vel_dx_);
 		prisma_walker->getFramePosition(foot_dx_, footPosition_Dx_);
 		
-		
-		//std::random_device rd;  // Will be used to obtain a seed for the random number engine
-		//std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
-		std::uniform_int_distribution<> dis(0, 10);
-		if(dis(gen_)==0){
-			footPositions_.push_back(footPosition_.e());
-		}
 
 		contacts(); //va dopo il world integrate, perche' il world integrate aggiorna i contatti. 
 		//error_vel();
 		//RSINFO_IF(visualizable_, "Joint actual value: "<<gc_[7])
 		//RSINFO_IF(visualizable_, "Error: "<<gc_[7] - m1_pos_(index_imitation_))
 		rewards_.record("torque", prisma_walker->getGeneralizedForce().squaredNorm());
+		rewards_.record("Joint_velocity", gv_.tail(3).squaredNorm());
+
 		//rewards_.record("lin_vel", curr_vel_*lin_reward_);
 		//rewards_.record("ang_vel", curr_vel_*ang_reward_);
 		//rewards_.record("lin_vel", mean_vel_rew_);
@@ -269,12 +280,16 @@ class ENVIRONMENT : public RaisimGymEnv {
 		rewards_.record("angular_penalty", 0.05*(bodyAngularVel_[0] + bodyLinearVel_[1])); //+0.025*bodyLinearVel_[2]
 		rewards_.record("slipping_piede_interno", slip_term_ + ang_vel_term_contact_);
 		rewards_.record("slipping_external_feet", slipping_external_feet_function());
-		rewards_.record("clearance", clearance_foot_);
-		rewards_.record("air_foot", SwingPenalty());
-		if(alfa_z_ > 65)
-			rewards_.record("leaning", alfa_z_*alfa_z_);
-			
+		rewards_.record("slipping_external_feet", slip_term_sxdx_);
+		//rewards_.record("air_foot", SwingPenalty());
+
+		actual_step_++;	
+		if(actual_step_ == num_step){
+			gc_init_[7] = gc_[7];
+			gc_init_[8] = gc_[8];
+		}
 		
+
 		return rewards_.sum();
 		
 	}
@@ -291,17 +306,81 @@ class ENVIRONMENT : public RaisimGymEnv {
 	}
 
 
+	/*void generateOffset(){
+		if(num_episode_ > 100 && num_episode_ < 200){
+			std::uniform_int_distribution dis_12(1,2);
+			offset_ = dis_12(gen_);
+		}
+		else if(num_episode_ > 200 && num_episode_ < 500){
+			std::uniform_int_distribution dis_13(1,3);
+			offset_ = dis_13(gen_);
+		} 
+		else if(num_episode_ > 500){
+			std::uniform_int_distribution dis_14(1,4);
+			offset_ = dis_14(gen_);
+		}
+	}*/
+
+	/*void curr(){
+		std::uniform_int_distribution dis_20_percent(0,4);
+		int randmoNumber = dis_20_percent(gen_);
+
+		if(num_episode_ > 500 && num_episode_ < 1200){
+			if(randmoNumber == 1){
+				if(!fallen_){
+					std::uniform_int_distribution dis_13(1,3);
+					offset_ = dis_13(gen_);
+					index_imitation_ = index_imitation_ + offset_;
+				}
+				else{
+					index_imitation_ = index_imitation_ + 1;
+				}
+			} 
+			else{
+				index_imitation_ = index_imitation_ + 1;
+			}
+		}
+		else if(num_episode_ > 1200){
+			if(randmoNumber == 1 || randmoNumber == 2){
+				if(!fallen_){
+					std::uniform_int_distribution dis_15(1,5);
+					offset_ = dis_15(gen_);
+					index_imitation_ = index_imitation_ + offset_;
+				}
+				else{
+					index_imitation_ = index_imitation_ + 1;
+				}	
+			} 
+			else{
+				index_imitation_ = index_imitation_ + 1;
+			}
+		}
+	}*/
+	
+
+
 	float imitation_function (double m1, double m2){
-		std::uniform_int_distribution dis_int(1,5);
-		index_imitation_ = index_imitation_ + dis_int(gen_);
-		
+	
+		//7if(num_episode_ < 50){
+			index_imitation_ = index_imitation_ + 1;
+		//}
+		//else
+			//curr();
+
 		if(index_imitation_ >= 1818)
 			index_imitation_ = 0;
 		
-		return 10*(std::abs(m1-m1_pos_(index_imitation_)) + std::abs( m2- m2_pos_(index_imitation_)));
+		
+		error_m1_ = m1 - m1_pos_(index_imitation_);
+		error_m2_ = m2 - m2_pos_(index_imitation_);
+		double gaussian_kernel = std::exp(-40*error_m1_*error_m1_ - 40*error_m2_*error_m2_);
+		
+		return gaussian_kernel;
 
 	}
  
+
+
 	float norm(Eigen::Vector3d vector){
 		float norma=0;
 		norma = sqrt(pow(vector(0),2)+pow(vector(1),2)+pow(vector(2),2));
@@ -348,6 +427,11 @@ class ENVIRONMENT : public RaisimGymEnv {
 			slip_term_ += std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
 			ang_vel_term_contact_ = ang_vel_.e().squaredNorm();
 		}
+
+		slip_term_sxdx_ = 0;
+		if(cF_["lateral_feet"] == 1){
+			slip_term_sxdx_ += std::sqrt(vel_sx_[0]*vel_sx_[0] + vel_sx_[1]*vel_sx_[1]) + std::sqrt(vel_dx_[0]*vel_dx_[0] + vel_dx_[1]*vel_dx_[1]);
+		}	
 	}
 
 
@@ -564,86 +648,78 @@ class ENVIRONMENT : public RaisimGymEnv {
 		Eigen::Vector3d z_axis(0,0,1);
 		alfa_z_ = acos((z_vec.dot(z_axis))/norm(z_vec));
 		alfa_z_ = (alfa_z_*180)/M_PI;
-		std::chrono::steady_clock::time_point end_alfa_time = std::chrono::steady_clock::now();
-		if(alfa_z_ > 50){
-			elapsed_time_[2] += std::chrono::duration<double, std::milli>(end_alfa_time - begin_[2]); 
-			begin_[2] =  std::chrono::steady_clock::now();
-		}
-		else{
-			elapsed_time_[2] = std::chrono::duration<double, std::milli>(0);
-			begin_[2] =  std::chrono::steady_clock::now();
-		}
-		//RSINFO_IF(visualizable_, alfa_z_*alfa_z_)
-		if(alfa_z_>90)
-			return true;
-			
-		std::chrono::steady_clock::time_point end[2] = {std::chrono::steady_clock::now(),
-														std::chrono::steady_clock::now()};
-														
-		
-		if(footPosition_[2] < 0.001){ 
-			elapsed_time_[1] += std::chrono::duration<double, std::milli>(end[1] - begin_[1]); 
-			begin_[1] =  std::chrono::steady_clock::now();
-		}
-		else{
-			elapsed_time_[1] = std::chrono::duration<double, std::milli>(0);
-			begin_[1] =  std::chrono::steady_clock::now();
-		}
-
-		if(footPosition_Dx_[2]<0.001 && footPosition_Sx_[2]<0.001){
-			elapsed_time_[0] += std::chrono::duration<double, std::milli>(end[0] - begin_[0]); 
-			begin_[0] =  std::chrono::steady_clock::now();
-		}
-		else{
-			elapsed_time_[0] = std::chrono::duration<double, std::milli>(0);
-			begin_[0] =  std::chrono::steady_clock::now();
-		}
 	
-		//RSINFO_IF(visualizable_, elapsed_time_[0].count())
-		if(elapsed_time_[1] >= std::chrono::duration<double, std::milli>(75000)){
-
-			RSINFO_IF(visualizable_, "locked on central foot")
-			elapsed_time_[1] = std::chrono::duration<double, std::milli>(0);
-			begin_[1] = std::chrono::steady_clock::now();
+		//RSINFO_IF(visualizable_, alfa_z_*alfa_z_)
+		if(alfa_z_>30 || (std::abs(error_m1_) + std::abs(error_m2_) > 0.12)){
+			RSINFO_IF(visualizable_, "FALLEN")
+			fallen_ = true;
 			return true;
 		}
-		if(elapsed_time_[0] >= std::chrono::duration<double, std::milli>(75000)){
-			RSINFO_IF(visualizable_, "locked on lateral foot")
-			elapsed_time_[0] = std::chrono::duration<double, std::milli>(0);
-			begin_[0] =  std::chrono::steady_clock::now();
-			return true;			
-		}
+			/*std::chrono::steady_clock::time_point end[2] = {std::chrono::steady_clock::now(),
+															std::chrono::steady_clock::now()};
+															
+			
+			if(footPosition_[2] < 0.001){ 
+				elapsed_time_[1] += std::chrono::duration<double, std::milli>(end[1] - begin_[1]); 
+				begin_[1] =  std::chrono::steady_clock::now();
+			}
+			else{
+				elapsed_time_[1] = std::chrono::duration<double, std::milli>(0);
+				begin_[1] =  std::chrono::steady_clock::now();
+			}
 
-		if(elapsed_time_[2] >= std::chrono::duration<double, std::milli>(5000)){
-			RSINFO_IF(visualizable_, "Too much leen")
-			elapsed_time_[2] = std::chrono::duration<double, std::milli>(0);
-			begin_[2] =  std::chrono::steady_clock::now();
-			return true;						
-		}
+			if(footPosition_Dx_[2]<0.001 && footPosition_Sx_[2]<0.001){
+				elapsed_time_[0] += std::chrono::duration<double, std::milli>(end[0] - begin_[0]); 
+				begin_[0] =  std::chrono::steady_clock::now();
+			}
+			else{
+				elapsed_time_[0] = std::chrono::duration<double, std::milli>(0);
+				begin_[0] =  std::chrono::steady_clock::now();
+			}
+		
+			//RSINFO_IF(visualizable_, elapsed_time_[0].count())
+			if(elapsed_time_[1] >= std::chrono::duration<double, std::milli>(75000)){
+
+				RSINFO_IF(visualizable_, "locked on central foot")
+				elapsed_time_[1] = std::chrono::duration<double, std::milli>(0);
+				begin_[1] = std::chrono::steady_clock::now();
+				fallen_ = true;
+
+				return true;
+			}
+			if(elapsed_time_[0] >= std::chrono::duration<double, std::milli>(75000)){
+				RSINFO_IF(visualizable_, "locked on lateral foot")
+				elapsed_time_[0] = std::chrono::duration<double, std::milli>(0);
+				begin_[0] =  std::chrono::steady_clock::now();
+				fallen_ = true;
+
+				return true;			
+			}
+
+			if(elapsed_time_[2] >= std::chrono::duration<double, std::milli>(5000)){
+				RSINFO_IF(visualizable_, "Too much leen")
+				elapsed_time_[2] = std::chrono::duration<double, std::milli>(0);
+				begin_[2] =  std::chrono::steady_clock::now();
+				fallen_ = true;
+
+				return true;						
+			}*/
 
 		terminalReward = 0.f;
 		return false;
 	}
 
 	void curriculumUpdate() {
-		generate_command_velocity(); //La metto qui perche' la reset viene chiamata troppe volte
+		//generate_command_velocity(); //La metto qui perche' la reset viene chiamata troppe volte
 
 		if(visualizable_){
 			std::cout<<"Tangential velocity -> central foot at contact: "<<slip_term_<<std::endl;
 		}
-
 		num_episode_++;
-		if(num_episode_ > 100 && num_episode_ < 200){
-			curr_vel_ += 0.01;
-			//curr_imitation_ -= 0.01;
-		}//diventa 1
-		else if(num_episode_ > 200 && num_episode_ < 500){
-			curr_vel_ += 0.03;
-			curr_imitation_ -= 0.03;
-		}//diventa 10
-
 
 	};
+
+
 
  private:
   int gcDim_, gvDim_, nJoints_,timing_,fbk_counter_,n_campione_vel_,n_campione_pos_, index_imitation_;
@@ -652,10 +728,10 @@ class ENVIRONMENT : public RaisimGymEnv {
   Eigen::VectorXd m1_pos_;
   Eigen::VectorXd m2_pos_;
   int p_ = 0;int n_campioni_ = 5;
-  dynamixel::PortHandler *portHandler_;
-  dynamixel::PacketHandler *packetHandler_;
+  //dynamixel::PortHandler *portHandler_;
+  //dynamixel::PacketHandler *packetHandler_;
   uint8_t dxl_error_ = 0;
-  int dxl_comm_result_ = COMM_TX_FAIL;
+  //int dxl_comm_result_ = COMM_TX_FAIL;
   Eigen::VectorXd azione_precedente_ = Eigen::VectorXd::Zero(3); 
   Eigen::VectorXd feedback_precedente_pos_ = Eigen::VectorXd::Zero(3); 
   Eigen::VectorXd feedback_precedente_vel_ = Eigen::VectorXd::Zero(3); 
@@ -729,17 +805,21 @@ class ENVIRONMENT : public RaisimGymEnv {
   int num_episode_ = 0;
   double ang_vel_term_contact_ = 0;
   double previous_reward_, lin_reward_, ang_reward_ = 0;
- 
+  hebi::Lookup lookup;
+
   int previous_contact;
   int count_ = 0;
   double vel_rew_, mean_vel_rew_, swing_time_d;
-  int NumberIteration_;
+  int NumberIteration_, countForCurriculum_;
   double curr_imitation_, curr_vel_;
   Eigen::VectorXd keyPoint_; 
   std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> footPositions_;
   bool gonext_ = false;
   float swing_penalty_;
-
+  int offset_, curr_index_; 
+  bool fallen_;
+  int actual_step_;
+  double error_m1_ = 0, error_m2_ = 0;
 };
 thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
 

@@ -208,7 +208,7 @@ class VectorizedEnvironment {
   inline void perAgentStep(int agentId,
                            Eigen::Ref<EigenRowMajorMat> &action,
                            Eigen::Ref<EigenVec> &reward,
-                           Eigen::Ref<EigenBoolVec> &done) {                            
+                           Eigen::Ref<EigenBoolVec> &done) {  
     reward[agentId] = environments_[agentId]->step(action.row(agentId));
     rewardInformation_[agentId] = environments_[agentId]->getRewards().getStdMap();
 

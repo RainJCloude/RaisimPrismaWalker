@@ -153,7 +153,8 @@ class PPO:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
                 loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-                running_loss += loss.item()
+                running_loss += loss.item() #Loss computed for that mini batch. Accumulate the loss per miniBatch
+                #Later you will divide this number for the number of epoches in order to get the loss per epoch. 
 
                 # Gradient step
                 self.optimizer.zero_grad()
@@ -165,7 +166,7 @@ class PPO:
                     mean_value_loss += value_loss.item()
                     mean_surrogate_loss += surrogate_loss.item()
 
-        loss_values_ephoches = running_loss / self.num_mini_batches #Loss for epoches
+        loss_values_ephoches = running_loss / self.num_mini_batches #Loss for epoches, computed as the mean of the loss per miniBatch
         self.loss_dict[update] = loss_values_ephoches / self.num_learning_epochs #Loss for episodes
 
         if log_this_iteration:

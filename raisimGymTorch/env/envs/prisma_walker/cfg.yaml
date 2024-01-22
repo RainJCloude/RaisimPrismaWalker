@@ -4,12 +4,12 @@ record_video: yes
 environment:
   render: True
 # just testing commenting
-  num_envs: 30
+  num_envs: 100
   eval_every_n: 50
-  num_threads: 30
+  num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
-  max_time: 40
+  max_time: 6
   action_std: 0.1
   num_seq: 5
   num_seq_vel: 5
@@ -36,6 +36,8 @@ environment:
       coeff: -0.005 ##Initialized at -10 in the reset of Environment.hpp
     third_joint:
       coeff: -0.6
+    Joint_velocity: 
+      coeff: -0.0005
 architecture:
   policy_net: [256, 128]
   value_net: [256, 128]
