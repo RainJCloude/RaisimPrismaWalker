@@ -70,12 +70,15 @@ lam = [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1]
 gamma = [0.995, 0.996, 0.997, 0.998, 0.999, 1]
 #gamma = [0.998]
 #lam = [0.95]
-
+rew_dict = {}
+done_dict = {}
 for j in gamma:
     for i in lam:
         saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                             save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp", task_path + "/runner.py"],
                             lam = i, gamma = j)  
+
+        rew_and_done_folder = os.path.join(saver.data_dir, "dicts")
 
         print("lambda = ", i)
         ppo = PPO.PPO(actor=actor,
@@ -97,7 +100,7 @@ for j in gamma:
         record_flag = False
         first_reward = 0
         average_ll_performance = 0
-        for update in range(201):            
+        for update in range(301):            
             start = time.time()
             env.reset()
             reward_ll_sum = 0
@@ -155,6 +158,10 @@ for j in gamma:
             average_ll_performance = reward_ll_sum / total_steps
             average_dones = done_sum / total_steps
             avg_rewards.append(average_ll_performance)
+
+            rew_dict[update] = average_ll_performance
+            done_dict[update] = average_dones
+
             if update == 0:
                 first_reward = average_ll_performance
 
@@ -162,7 +169,7 @@ for j in gamma:
                 print("Fail")
                 break"""
 
-            if average_ll_performance > best_rewards and update >50:
+            if average_ll_performance > best_rewards and update >75:
                 best_rewards = average_ll_performance
 
                 torch.save({
@@ -192,3 +199,13 @@ for j in gamma:
             print('{:<40} {:>6}'.format("real time factor: ", '{:6.0f}'.format(total_steps / (end - start)
                                                                             * cfg['environment']['control_dt'])))
             print('----------------------------------------------------\n')
+        
+        with open(rew_and_done_folder + "/rew.pkl", 'wb') as file:  #wb stands for write binary
+            dump(rew_dict, file)
+            file.close()
+
+        with open(rew_and_done_folder + "/done.pkl", 'wb') as file:  #wb stands for write binary
+            dump(done_dict, file)
+            file.close()            
+
+

@@ -32,11 +32,17 @@ def print_loss(x, y ):
 if __name__ == "__main__":
     task_path = os.path.dirname(os.path.realpath(__file__))
 
-    lam = [9, 91, 92, 93, 94, 95, 96, 97, 98, 99]
+    lam = [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99]
+    #lam = [0.9, 0.91] #gamma= 0.995
+    #lam = [0.9, 0.92, 0.95]  #Vince il 0.92 per gamma=0.996 con min loss 0.65
+    #lam = [0.9, 0.91] #gamma= 0.997 fa schifosissimo
+    #lam = [0.9, 0.91, 0.94, 0.95, 0.98, 0.99] #gamma=0.998 fa schifomegasissimo arriva anche a 4
+    #lam = [0.9, 0.98, 0.99] #0.98 e' il migliore per gamma=0.999
+    lam = [0.94, 0.95, 0.96, 0.97, 0.98, 0.99]
     file_paths = []
     for i in lam:
-        path_to_data = task_path + "/../../../.." + "/raisimGymTorch/data/prisma_walker_locomotion/" 
-        file_paths.append(path_to_data + str(i) + "/loss/loss.pkl")
+        path_to_data = task_path + "/../../../.." + "/data/prisma_walker_locomotion/" 
+        file_paths.append(path_to_data + "lam_" + str(i) + "__gamma_1" + "/loss/loss.pkl")
 
         # Read the pickle file
         loss_dict = read_pickle_file(file_paths[-1])

@@ -43,7 +43,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		/// create world
 		world_ = std::make_unique<raisim::World>();
-		home_path_ = "/home/claudio/raisim_ws/raisimlib";
+		home_path_ = "/home/dev/raisim_ws/raisimlib";
 		/// add objects
 		prisma_walker = world_->addArticulatedSystem(home_path_ + "/rsc/prisma_walker/urdf/prisma_walker.urdf");
 		prisma_walker->setName("prisma_walker");
@@ -179,17 +179,11 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 
 		if(fallen_){
-			index_imitation_ = 0;
-			gc_init_[7] = 0.6;
-			gc_init_[8] = 0.6;
-		}
-
-		/*if(rn_.intRand(0,5) == 2){ //Facendolo partire da sub(ito da stato rand cade subito e sempre
 			index_imitation_ = 1818*rn_.sampleUniform01();
 
-			gc_init_[7] = m1_pos_(index_imitation_);
-			gc_init_[8] = m2_pos_(index_imitation_);
-		}*/
+			gc_init_[7] = m1_pos_(index_imitation_ - 1);
+			gc_init_[8] = m2_pos_(index_imitation_ - 1);
+		}
 	
 
 		fallen_ = false;
@@ -238,7 +232,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 		contacts(); //va dopo il world integrate, perche' il world integrate aggiorna i contatti. 
  
 		rewards_.record("torque", prisma_walker->getGeneralizedForce().squaredNorm());
-		rewards_.record("Joint_velocity", gv_.tail(3).squaredNorm());
+		rewards_.record("Joint_velocity", gv_.segment(6,2).squaredNorm());
+
+
+		rewards_.record("Joint_velocity", 5*gv_.tail(1).squaredNorm());
 
 		rewards_.record("imitation", imitation_function());
 		rewards_.record("dynamixel_joint", std::exp(-2*(1/sigma)*gc_[9]*gc_[9]));
@@ -323,9 +320,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 
 	float imitation_function (){
-	
-		//7if(num_episode_ < 50){
+		
+		do{
 			index_imitation_ = index_imitation_ + 1;
+		}while(m1_pos_(index_imitation_) - m1_pos_(index_imitation_ + 1) < 1e-4);
 		//}
 		//else
 			//curr();
@@ -635,8 +633,14 @@ class ENVIRONMENT : public RaisimGymEnv {
 		alfa_z_ = (alfa_z_*180)/M_PI;
 	
 		//RSINFO_IF(visualizable_, alfa_z_*alfa_z_)
-		if(alfa_z_>30 || (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > curr_tolerance_*sigma)){
-			RSINFO_IF(visualizable_, "FALLEN")
+		if(alfa_z_>25){
+			RSINFO_IF(visualizable_, "fallen for angle")
+			fallen_ = true;
+			return true;
+		}
+
+		if (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > curr_tolerance_*sigma){
+			RSINFO_IF(visualizable_, "fallen for error")
 			fallen_ = true;
 			return true;
 		}
@@ -697,9 +701,11 @@ class ENVIRONMENT : public RaisimGymEnv {
 	void curriculumUpdate() {
 		//generate_command_velocity(); //La metto qui perche' la reset viene chiamata troppe volte
 
-		if(num_episode_ > 10 && num_episode_ % 6 == 0){
-			curr_tolerance_ += -0.01;
+		if(num_episode_ > 10 && !fallen_){
+			curr_tolerance_ += -0.05;
 		}
+		if(fallen_)
+			curr_tolerance_ += 0.1;
 		if(curr_tolerance_ < 2)
 			curr_tolerance_ = 2;
 		num_episode_++;
