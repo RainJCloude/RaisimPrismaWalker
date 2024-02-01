@@ -38,14 +38,8 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("stopRecordingVideo", &VectorizedEnvironment<ENVIRONMENT>::stopRecordingVideo)
     .def("startRecordingVideo", &VectorizedEnvironment<ENVIRONMENT>::startRecordingVideo)
     .def("curriculumUpdate", &VectorizedEnvironment<ENVIRONMENT>::curriculumUpdate)
-    .def("command_vel", &VectorizedEnvironment<ENVIRONMENT>::command_vel)
     .def("getObStatistics", &VectorizedEnvironment<ENVIRONMENT>::getObStatistics)
     .def("setObStatistics", &VectorizedEnvironment<ENVIRONMENT>::setObStatistics)
-    .def("getNumSeq_Pos", &VectorizedEnvironment<ENVIRONMENT>::getNumSeq_Pos)
-    .def("getNumSeq_Vel", &VectorizedEnvironment<ENVIRONMENT>::getNumSeq_Vel)
-    .def("get_LinearVel_x", &VectorizedEnvironment<ENVIRONMENT>::get_LinearVel_x)
-    .def("get_LinearVel_y", &VectorizedEnvironment<ENVIRONMENT>::get_LinearVel_y)
-    .def("get_AngularVel_z", &VectorizedEnvironment<ENVIRONMENT>::get_AngularVel_z)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

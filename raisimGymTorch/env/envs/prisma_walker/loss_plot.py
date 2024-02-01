@@ -1,6 +1,7 @@
 import pickle
 import matplotlib.pyplot as plt
 import os
+import numpy as np
 
 def read_pickle_file(file_path):
     try:
@@ -14,34 +15,37 @@ def read_pickle_file(file_path):
         print(f"Error reading the pickle file: {e}")
         return None
 
-def print_loss(x,y):
-    plt.plot(x,y)
-    plt.title('List Plot')
-    plt.xlabel('Index')
-    plt.ylabel('Value')
-    plt.show()
+def print_loss(x, y ):
+
+    plt.plot(x, label=y)
+
+    plt.title('Loss function varying lambda')
+    plt.xlabel('Episode')
+    plt.ylabel('Loss value')
+
+    plt.legend()
+    plt.grid()
+    
 
 
 # Example usage
 if __name__ == "__main__":
     task_path = os.path.dirname(os.path.realpath(__file__))
 
-    lam = [9, 91, 92, 93, 94, 95, 96, 97, 98, 99, 1]
+    lam = [9, 91, 92, 93, 94, 95, 96, 97, 98, 99]
     file_paths = []
     for i in lam:
-        path_to_data = task_path + "/../.." + "/data/prisma_walker_locomotion/" 
-        file_paths.append(path_to_data + str(i) + "/loss")
+        path_to_data = task_path + "/../../../.." + "/raisimGymTorch/data/prisma_walker_locomotion/" 
+        file_paths.append(path_to_data + str(i) + "/loss/loss.pkl")
 
         # Read the pickle file
-        task_path = os.path.dirname(os.path.realpath(__file__))
-
         loss_dict = read_pickle_file(file_paths[-1])
 
-    # Process the loaded data (replace this with your actual data processing logic)
-    if loss_dict is not None:
-        x_axis = loss_dict.values() #prendo solo i valori del dizionario
-        x_axis = list(x_axis)
+        # Process the loaded data (replace this with your actual data processing logic)
+        if loss_dict is not None:
+            x_axis = loss_dict.values() #prendo solo i valori del dizionario
+            x_axis = list(x_axis)
 
-        y_axis = np.arange(0, len(loss_dict), 0.01)
- 
-        print_loss(x_axis, y_axis )
+            print_loss(x_axis, "lambda = " + str(i) )
+    
+    plt.show()

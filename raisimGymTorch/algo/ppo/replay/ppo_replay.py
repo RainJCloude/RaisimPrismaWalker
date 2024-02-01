@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-from .storage import RolloutStorage
+from .storage_replay import RolloutStorage
 from pickle import dump
 
 class PPO:
@@ -15,28 +15,32 @@ class PPO:
                  num_transitions_per_env,
                  num_learning_epochs,
                  num_mini_batches,
+                 start_curriculum,
                  clip_param=0.2,
-                 gamma=0.998,
-                 lam=0.95,
-                 value_loss_coef=0.5, 
+                 gamma=0.995,
+                 lam=0.945,
+                 value_loss_coef=0.5,
                  entropy_coef=0.0,
-                 learning_rate=5e-4, 
+                 learning_rate=5e-4,
                  max_grad_norm=0.5,
                  learning_rate_schedule='adaptive',
                  desired_kl=0.01,
                  use_clipped_value_loss=True,
-                 log_dir='run',
+                 log_dir='run',  #NON e' il percorso a run, ma solo la cartella. Se lo passi come argomento allora dai un percorso e puoi fare tutta la magagna sotto
                  device='cpu',
+                 want_to_save_in_data_dir = False,
                  shuffle_batch=True):
 
         # PPO components
         self.actor = actor
         self.critic = critic
-        self.storage = RolloutStorage(num_envs, num_transitions_per_env, actor.obs_shape, critic.obs_shape, actor.action_shape, device)
+        self.start_curriculum = start_curriculum
+        self.storage = RolloutStorage(num_envs, num_transitions_per_env, start_curriculum, actor.obs_shape, critic.obs_shape, actor.action_shape, device)
 
         if shuffle_batch:
             self.batch_sampler = self.storage.mini_batch_generator_shuffle
         else:
+            print('inorder batch')
             self.batch_sampler = self.storage.mini_batch_generator_inorder
 
         self.optimizer = optim.Adam([*self.actor.parameters(), *self.critic.parameters()], lr=learning_rate)
@@ -58,8 +62,23 @@ class PPO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
         # Log
-        self.log_dir = os.path.join(log_dir, "loss")
-        self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+        directory = "dict"
+        path_to_directory = log_dir
+        """log_dir, per come e' stato passato come argomento nel runner.py, e' il percorso alla cartella all'interno di "data" nella cartella di raisimGymTorch"""
+        self.log_dir = os.path.join(log_dir, directory) #join connect this 2 paths
+        """Siccome se non passo log_dir, allora questo e' uguale a run, e NON AL PERCORSO A RUN, la cartella non sa dove crearla e quindi non glie la faccio
+            creare. SE invece gli passo log_dir come saver.data_dir, allora sto passando un intero percorso, quindi sa dove crearmi la cartella"""
+        if(want_to_save_in_data_dir == True): 
+            os.mkdir(self.log_dir)
+        """os.mkdir prende un percorso a una directory, e ti crea la directory in quel percorso se non esiste. Se gli dai come percorso "hom/claudio/directory"
+        lui vede che in /home/claudio non esiste una cartella directory e quindi te la crea. Se invece quella cartella gia' esiste, ritorna errore"""
+        #self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S')) #join connect this 2 paths
+
+        #Self.log_dir a questo punto contiene il percorso allaa cartella "tensorBoard_file" in cui voglio salvare i file di tensorBoard
+        #self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10) #It takes as argument he save directory location. 
+        self.writer = SummaryWriter() 
+        """Se a self.writer non specifichi una log_dir, te ne crea una lui dove hai lanciato il programma chiamata runs, e ti salva li i file per tensorBoard
+        Se invece la specifichi, ti salva il file di tensorboard in quella cartella"""
         self.tot_timesteps = 0
         self.tot_time = 0
 
@@ -73,6 +92,9 @@ class PPO:
         self.actions_log_prob = None
         self.actor_obs = None
 
+        #Dictionaries
+        self.mean_value_dict = {}
+        self.mean_surrogate_dict = {}
         self.loss_dict = {}
 
     def act(self, actor_obs):
@@ -81,16 +103,16 @@ class PPO:
             self.actions, self.actions_log_prob = self.actor.sample(torch.from_numpy(actor_obs).to(self.device))
         return self.actions
 
-    def step(self, value_obs, rews, dones):
-        self.storage.add_transitions(self.actor_obs, value_obs, self.actions, self.actor.action_mean, self.actor.distribution.std_np, rews, dones,
+    def step(self, value_obs, rews, dones, update):
+        self.storage.add_transitions(self.actor_obs, update, value_obs, self.actions, self.actor.action_mean, self.actor.distribution.std_np, rews, dones,
                                      self.actions_log_prob)
 
-    def update(self, actor_obs, value_obs, log_this_iteration, update):
+    def update(self, actor_obs, value_obs, log_this_iteration, update, average_ll_performance):
         last_values = self.critic.predict(torch.from_numpy(value_obs).to(self.device))
-
+        #self.update = update
         # Learning step
-        self.storage.compute_returns(last_values.to(self.device), self.critic, self.gamma, self.lam)
-        mean_value_loss, mean_surrogate_loss, loss, infos = self._train_step(log_this_iteration, update)
+        self.storage.compute_returns(last_values.to(self.device), self.critic, self.gamma, self.lam, update, average_ll_performance)
+        mean_value_loss, mean_surrogate_loss, infos = self._train_step(log_this_iteration, update)
         self.storage.clear()
 
         if log_this_iteration:
@@ -103,16 +125,17 @@ class PPO:
         self.writer.add_scalar('PPO/surrogate', variables['mean_surrogate_loss'], variables['it'])
         self.writer.add_scalar('PPO/mean_noise_std', mean_std.item(), variables['it'])
         self.writer.add_scalar('PPO/learning_rate', self.learning_rate, variables['it'])
-        self.writer.add_scalar('PPO/loss', variables['loss'], variables['it'])
 
     def _train_step(self, log_this_iteration, update):
         mean_value_loss = 0
-        mean_surrogate_loss = 0
+        mean_surrogate_loss = 0 
         running_loss = 0.0
+
         for epoch in range(self.num_learning_epochs):
             for actor_obs_batch, critic_obs_batch, actions_batch, old_sigma_batch, old_mu_batch, current_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch \
                     in self.batch_sampler(self.num_mini_batches):
 
+                #print('Mini batch di epoca', epoch, 'pari a ',actor_obs_batch.shape)
                 actions_log_prob_batch, entropy_batch = self.actor.evaluate(actor_obs_batch, actions_batch)
                 value_batch = self.critic.evaluate(critic_obs_batch)
 
@@ -140,7 +163,7 @@ class PPO:
                 surrogate = -torch.squeeze(advantages_batch) * ratio
                 surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
                                                                                    1.0 + self.clip_param)
-                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean() 
+                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
 
                 # Value function loss
                 if self.use_clipped_value_loss:
@@ -164,18 +187,28 @@ class PPO:
                 if log_this_iteration:
                     mean_value_loss += value_loss.item()
                     mean_surrogate_loss += surrogate_loss.item()
-
-            loss_values_ephoches = running_loss / self.num_mini_batches #Loss for epoches
+        
+        loss_values_ephoches = running_loss / self.num_mini_batches #Loss for epoches
         self.loss_dict[update] = loss_values_ephoches / self.num_learning_epochs #Loss for episodes
 
         if log_this_iteration:
             num_updates = self.num_learning_epochs * self.num_mini_batches
             mean_value_loss /= num_updates
             mean_surrogate_loss /= num_updates
-            loss /= num_updates
 
-        with open(self.log_dir + "/loss.pkl", 'wb') as file:  #wb stands for write binary
-            dump(self.loss_dict, file)
-            file.close()
+            self.mean_value_dict[update] = mean_value_loss
+            self.mean_surrogate_dict[update] = mean_surrogate_loss
 
-        return mean_value_loss, mean_surrogate_loss, loss, locals()
+            """with open(self.log_dir + "/mean_value_loss.pkl", 'wb') as file:  #wb stands for write binary
+                dump(self.mean_value_dict, file)
+                file.close()
+            
+            with open(self.log_dir + "/mean_surrogate_loss.pkl", 'wb') as file:  #wb stands for write binary
+                dump(self.mean_surrogate_dict, file)
+                file.close()
+            
+            with open(self.log_dir + "/loss.pkl", 'wb') as file:  #wb stands for write binary
+                dump(self.loss_dict, file)
+                file.close()"""
+
+        return mean_value_loss, mean_surrogate_loss, locals()

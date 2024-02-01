@@ -81,6 +81,8 @@ class MLP(nn.Module):
         for idx in range(len(shape)-1):
             modules.append(nn.Linear(shape[idx], shape[idx+1]))
             modules.append(self.activation_fn())
+            modules.append(nn.Dropout(0.45))#After the activation, unless you use RELU. In that case is influent
+            #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
             scale.append(np.sqrt(2))
 
         modules.append(nn.Linear(shape[-1], output_size))
