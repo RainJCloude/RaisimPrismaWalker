@@ -81,7 +81,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		nextMotorPositions_.setZero(2*num_seq);
 
 		current_action_.setZero(3);
-		index_imitation_ = 0;
+		index_imitation_[0] = 0;
+		index_imitation_[1] = 0;
 		prisma_walker->setPdGains(jointPgain, jointDgain);
 		prisma_walker->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
@@ -111,8 +112,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		foot_sx_ = prisma_walker->getFrameIdxByLinkName("piede_sx");
 		foot_dx_ = prisma_walker->getFrameIdxByLinkName("piede_dx");
 
-		m1_pos_.setZero(1818);
-		m2_pos_.setZero(1818); 
+		m1_pos_.setZero(925);
+		m2_pos_.setZero(1121); 
 		/// visualize if it is the first environment
 		if (visualizable_) {
 			server_ = std::make_unique<raisim::RaisimServer>(world_.get());
@@ -122,7 +123,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		num_episode_ = 0;
 		curr_vel_ = 0;
-		curr_imitation_ = 1;
+		curr_imitation_ = 1e-6;
 		keyPoint_(10);
 		curr_index_ = 0;
 		curr_tolerance_ = 10;
@@ -152,41 +153,40 @@ class ENVIRONMENT : public RaisimGymEnv {
 		max_height_ = 0;
 		clearance_foot_ = 0.1; //penalita' iniziale. Altrimenti non alzera' mai il piede
 
-		std::fstream m1_traj;
-    	std::fstream m2_traj;
-		int num_row_in_file = 1818;
+		std::ifstream m1_traj;  //fstream is for both input and output, but hen you need to specify with std::ios::in
+    	std::ifstream m2_traj;
 
-		m1_traj.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/pos_m1_18s.txt", std::ios::in);
-    	m2_traj.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/pos_m2_18s.txt", std::ios::in);
+		m1_traj.open("m1.txt", std::ios::in);
+    	m2_traj.open("m2.txt", std::ios::in);
 	
 		Eigen::VectorXd m1_pos(num_row_in_file);
 		Eigen::VectorXd m2_pos(num_row_in_file);
 
 		if(m1_traj.is_open() && m2_traj.is_open()){
-			for(int j = 0;j<num_row_in_file;j++)
-				m1_traj >> m1_pos(j);  //one character at time store the content of the file inside the vector
 
-			m1_pos_=-m1_pos;
-
-			for(int j = 0;j<num_row_in_file;j++)
-				m2_traj >> m2_pos(j);
-
-			m2_pos_=-m2_pos;
+			for(int j = 0; j<m1_pos_.size() ;j++)
+				m1_traj >> m1_pos_(j);  //one character at time store the content of the file inside the vector
+				//m1_pos_=-m1_pos;
+			for(int j = 0; j<m2_pos_.size() ;j++)
+				m2_traj >> m2_pos_(j);
+				//m2_pos_=-m2_pos;
+	
 		}
 		
 		m1_traj.close(); 
+		m2_traj.close();
 		previous_contact = 0;
 
 
 		if(fallen_){
-			index_imitation_ = 1818*rn_.sampleUniform01();
+			index_imitation_[0] = 1818*rn_.sampleUniform01();
+			index_imitation_[1] = 1818*rn_.sampleUniform01();
 
-			gc_init_[7] = m1_pos_(index_imitation_ - 1);
-			gc_init_[8] = m2_pos_(index_imitation_ - 1);
+			gc_init_[7] = m1_pos_(index_imitation_[0] - 1);
+			gc_init_[8] = m2_pos_(index_imitation_[1] - 1);
 		}
 	
 
-		fallen_ = false;
 		prisma_walker->setState(gc_init_, gv_init_);
 		updateObservation();
 	
@@ -196,7 +196,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		
 		countForCurriculum_ = 0;
 
-		vel_rew_ = 0;
+		error_penalty_ = 0;
 		swing_penalty_ = 0; //Da usare solo in caso di penalty
 		previous_contact = 1; //Parte da piede a terra e quindi va a 1
 		actual_step_ = 0;
@@ -208,7 +208,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		pTarget3_ = action.cast<double>(); //dim=n_joints
 		pTarget3_ = pTarget3_.cwiseProduct(actionStd_);
 
-		actionMean_ << m1_pos_(index_imitation_), m2_pos_(index_imitation_), 0.0;
+		actionMean_ << m1_pos_(index_imitation_[0]), m2_pos_(index_imitation_[1]), 0.0;
 		pTarget3_ += actionMean_;
 		pTarget_.tail(nJoints_) << pTarget3_;
 		current_action_ = pTarget3_;
@@ -233,16 +233,15 @@ class ENVIRONMENT : public RaisimGymEnv {
  
 		rewards_.record("torque", prisma_walker->getGeneralizedForce().squaredNorm());
 		rewards_.record("Joint_velocity", gv_.segment(6,2).squaredNorm());
-
-
 		rewards_.record("Joint_velocity", 5*gv_.tail(1).squaredNorm());
+
+		rewards_.record("error_penalty", error_penalty_);
 
 		rewards_.record("imitation", imitation_function());
 		rewards_.record("dynamixel_joint", std::exp(-2*(1/sigma)*gc_[9]*gc_[9]));
-		rewards_.record("angular_penalty", 0.05*(bodyAngularVel_[0] + bodyLinearVel_[1])); //+0.025*bodyLinearVel_[2]
-		rewards_.record("slipping_piede_interno", slip_term_ + ang_vel_term_contact_);
-		rewards_.record("slipping_external_feet", slip_term_sxdx_);
-		//rewards_.record("air_foot", SwingPenalty());
+		rewards_.record("angular_penalty", 0.05*(bodyAngularVel_[0] + bodyLinearVel_[1]));
+		rewards_.record("slip", slip_term_);
+		rewards_.record("standing_still", standingStill_);
 
 		actual_step_++;	
 		if(actual_step_ == num_step){
@@ -265,83 +264,28 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	}
 
-
-	/*void generateOffset(){
-		if(num_episode_ > 100 && num_episode_ < 200){
-			std::uniform_int_distribution dis_12(1,2);
-			offset_ = dis_12(gen_);
-		}
-		else if(num_episode_ > 200 && num_episode_ < 500){
-			std::uniform_int_distribution dis_13(1,3);
-			offset_ = dis_13(gen_);
-		} 
-		else if(num_episode_ > 500){
-			std::uniform_int_distribution dis_14(1,4);
-			offset_ = dis_14(gen_);
-		}
-	}*/
-
-	/*void curr(){
-		std::uniform_int_distribution dis_20_percent(0,4);
-		int randmoNumber = dis_20_percent(gen_);
-
-		if(num_episode_ > 500 && num_episode_ < 1200){
-			if(randmoNumber == 1){
-				if(!fallen_){
-					std::uniform_int_distribution dis_13(1,3);
-					offset_ = dis_13(gen_);
-					index_imitation_ = index_imitation_ + offset_;
-				}
-				else{
-					index_imitation_ = index_imitation_ + 1;
-				}
-			} 
-			else{
-				index_imitation_ = index_imitation_ + 1;
-			}
-		}
-		else if(num_episode_ > 1200){
-			if(randmoNumber == 1 || randmoNumber == 2){
-				if(!fallen_){
-					std::uniform_int_distribution dis_15(1,5);
-					offset_ = dis_15(gen_);
-					index_imitation_ = index_imitation_ + offset_;
-				}
-				else{
-					index_imitation_ = index_imitation_ + 1;
-				}	
-			} 
-			else{
-				index_imitation_ = index_imitation_ + 1;
-			}
-		}
-	}*/
-	
-
-
 	float imitation_function (){
 		
-		do{
-			index_imitation_ = index_imitation_ + 1;
-		}while(m1_pos_(index_imitation_) - m1_pos_(index_imitation_ + 1) < 1e-4);
-		//}
-		//else
-			//curr();
+	 
+		index_imitation_[0] += 1;
+		index_imitation_[1] += 1;
 
-		if(index_imitation_ >= 1818)
-			index_imitation_ = 0;
+		if(index_imitation_[0] > 925)
+			index_imitation_[0] = 0;
+
+		if(index_imitation_[1] > 1121)
+			index_imitation_[1] = 0;
+
 		
 		
-		error_m1_ = gc_[7] - m1_pos_(index_imitation_);
-		error_m2_ = gc_[8] - m2_pos_(index_imitation_);
+		error_m1_ = gc_[7] - m1_pos_(index_imitation_[0]);
+		error_m2_ = gc_[8] - m2_pos_(index_imitation_[1]);
 		double gaussian_kernel = std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_));
 		
 		return gaussian_kernel;
 
 	}
  
-
-
 	float norm(Eigen::Vector3d vector){
 		float norma=0;
 		norma = sqrt(pow(vector(0),2)+pow(vector(1),2)+pow(vector(2),2));
@@ -369,57 +313,11 @@ class ENVIRONMENT : public RaisimGymEnv {
 	}
 
 	void slippage(){
-		
-		prisma_walker->getFrameAngularVelocity(foot_center_, ang_vel_);
 		slip_term_ = 0;
-		ang_vel_term_contact_ = 0;
 		if(cF_["center_foot"] == 1 || footPosition_[2] < 0.001){
 			slip_term_ += std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
-			ang_vel_term_contact_ = ang_vel_.e().squaredNorm();
-		}
-
-		slip_term_sxdx_ = 0;
-		if(cF_["lateral_feet"] == 1){
-			slip_term_sxdx_ += std::sqrt(vel_sx_[0]*vel_sx_[0] + vel_sx_[1]*vel_sx_[1]) + std::sqrt(vel_dx_[0]*vel_dx_[0] + vel_dx_[1]*vel_dx_[1]);
 		}	
 	}
-
-
-	void FrictionCone(){
-		int k = 4;
-		int lambda = 4; //less than 1 gives some errors
-		Eigen::Vector3d contactForce_L, contactForce_R, contactForce;
-		double pi_j_k;
-		double theta = std::atan(0.9);
-		double alpha_L, alpha_R, alpha;
-
-		cF_["center_foot"] = 0;
-		cF_["lateral_feet"] = 0;
-
-		H_ = 0;
-		for(auto& contact: prisma_walker->getContacts()){
-			if (contact.skip()) continue;  //contact.skip() ritorna true se siamo in una self-collision, in quel caso ti ritorna il contatto 2 volte
-			if(contact.getlocalBodyIndex() == 3 ){
-				cF_["center_foot"] = 1; 
-
-				contactForce = (contact.getContactFrame().e().transpose() * contact.getImpulse().e()) / world_->getTimeStep();
-				contactForce.normalize(); //a quanto pare e' stata implementata come void function, quindi non ha un return. D'ora in poi contactForce avra' norma 1
-				alpha = std::acos( contact.getNormal().e().dot(contactForce));
-
-				H_ = 1/(lambda*( (theta-alpha) * (theta+alpha)));
-			}
-
-			else if(contact.getlocalBodyIndex() == 0 ){  
-				cF_["lateral_feet"] = 1; 
-			}      
-		} 
-
-		slippage();
-		clearance();
-
-
-    }
-
 
     void swapMatrixRows(Eigen::Matrix3d &mat){		
                   Eigen::Vector3d temp;
@@ -446,7 +344,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 				ang_reward_ += -0.1;
 			}
 		}
-
 	}
 
 	void mean_square_error(){
@@ -457,20 +354,11 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	void contacts(){
 		
-		prisma_walker->getFrameVelocity(foot_center_, vel_);
 		prisma_walker->getFramePosition(foot_center_, footPosition_);
 	
-
-		prisma_walker->getFrameVelocity(foot_sx_, vel_sx_);
-		prisma_walker->getFramePosition(foot_sx_, footPosition_Sx_);
-
-		prisma_walker->getFrameVelocity(foot_dx_, vel_dx_);
-		prisma_walker->getFramePosition(foot_dx_, footPosition_Dx_);
-		
-
-
 		cF_["center_foot"] = 0;
 		cF_["lateral_feet"] = 0;
+
 		for(auto& contact: prisma_walker->getContacts()){
 			if (contact.skip()) continue;  //contact.skip() ritorna true se siamo in una self-collision, in quel caso ti ritorna il contatto 2 volte
 			if(contact.getlocalBodyIndex() == 3 ){
@@ -481,8 +369,25 @@ class ENVIRONMENT : public RaisimGymEnv {
 			}      
 		}
 
-		mse_and_airTime();
+		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+		if(cF_["center_foot"] == 1 && cF_["lateral_feet"] == 1){
+			elapsed_time_ += std::chrono::duration<double, std::milli>(end - start_); 
+			start_ = std::chrono::steady_clock::now();
+			if(elapsed_time_ > std::chrono::duration<double, std::milli>(1000))
+				standingStill_ += 1;
+		}
+		else{
+			standingStill_ = 0;
+			elapsed_time_ = std::chrono::duration<double, std::milli>(0);
+			start_ =  std::chrono::steady_clock::now();
+		}
+
+		slippage();
+		clearance();
+		//mse_and_airTime();
 	} 
+ 
 
 	inline void mse_and_airTime(){
 
@@ -516,27 +421,20 @@ class ENVIRONMENT : public RaisimGymEnv {
 		//RSINFO_IF(visualizable_, "swing time: "<< swing_time_.count())
 		//RSINFO_IF(visualizable_, "error vel: "<< mean_rew_x_)
 		swing_time_d = swing_time_.count()/1000;
-		slippage();
-		clearance();
-
+ 
 	}
 
 
 
 	void generate_command_velocity(){ 
-
 		command_[0] = 0;
 		command_[2] = 0;
-
-		/*if(visualizable_){
-			std::cout<<"Command velocity: "<<command_<<std::endl;
-		}*/
 	}
 		
 
 	void updateObservation() {
 		
-		nextMotorPositions_ << m1_pos_(index_imitation_), m1_pos_(index_imitation_ + 1), m1_pos_(index_imitation_ +2), m2_pos_(index_imitation_), m2_pos_(index_imitation_ + 1), m2_pos_(index_imitation_ +2);
+		nextMotorPositions_ << m1_pos_(index_imitation_[0]), m1_pos_(index_imitation_[0] + 1), m1_pos_(index_imitation_[0] +2), m2_pos_(index_imitation_[1]), m2_pos_(index_imitation_[1] + 1), m2_pos_(index_imitation_[1] +2);
 		//Il giunto di base e' fisso rispetto alla base. Quindi l'orientamento della base e' quello del motore 
 		if(ActuatorConnected_)
 		{ 	//If motors are not connected you get a seg fault om the sendRequest
@@ -641,58 +539,15 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		if (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > curr_tolerance_*sigma){
 			RSINFO_IF(visualizable_, "fallen for error")
+			error_penalty_ += curr_tolerance_*0.1;
 			fallen_ = true;
+			fallen_error = true;
 			return true;
 		}
-			/*std::chrono::steady_clock::time_point end[2] = {std::chrono::steady_clock::now(),
-															std::chrono::steady_clock::now()};
-															
-			
-			if(footPosition_[2] < 0.001){ 
-				elapsed_time_[1] += std::chrono::duration<double, std::milli>(end[1] - begin_[1]); 
-				begin_[1] =  std::chrono::steady_clock::now();
-			}
-			else{
-				elapsed_time_[1] = std::chrono::duration<double, std::milli>(0);
-				begin_[1] =  std::chrono::steady_clock::now();
-			}
 
-			if(footPosition_Dx_[2]<0.001 && footPosition_Sx_[2]<0.001){
-				elapsed_time_[0] += std::chrono::duration<double, std::milli>(end[0] - begin_[0]); 
-				begin_[0] =  std::chrono::steady_clock::now();
-			}
-			else{
-				elapsed_time_[0] = std::chrono::duration<double, std::milli>(0);
-				begin_[0] =  std::chrono::steady_clock::now();
-			}
-		
-			//RSINFO_IF(visualizable_, elapsed_time_[0].count())
-			if(elapsed_time_[1] >= std::chrono::duration<double, std::milli>(75000)){
-
-				RSINFO_IF(visualizable_, "locked on central foot")
-				elapsed_time_[1] = std::chrono::duration<double, std::milli>(0);
-				begin_[1] = std::chrono::steady_clock::now();
-				fallen_ = true;
-
-				return true;
-			}
-			if(elapsed_time_[0] >= std::chrono::duration<double, std::milli>(75000)){
-				RSINFO_IF(visualizable_, "locked on lateral foot")
-				elapsed_time_[0] = std::chrono::duration<double, std::milli>(0);
-				begin_[0] =  std::chrono::steady_clock::now();
-				fallen_ = true;
-
-				return true;			
-			}
-
-			if(elapsed_time_[2] >= std::chrono::duration<double, std::milli>(5000)){
-				RSINFO_IF(visualizable_, "Too much leen")
-				elapsed_time_[2] = std::chrono::duration<double, std::milli>(0);
-				begin_[2] =  std::chrono::steady_clock::now();
-				fallen_ = true;
-
-				return true;						
-			}*/
+		if(cF_["center_foot"] == 0 && bodyLinearVel_.squaredNorm() !=0){
+			return true;
+		}		
 
 		terminalReward = 0.f;
 		return false;
@@ -701,14 +556,30 @@ class ENVIRONMENT : public RaisimGymEnv {
 	void curriculumUpdate() {
 		//generate_command_velocity(); //La metto qui perche' la reset viene chiamata troppe volte
 
-		if(num_episode_ > 10 && !fallen_){
+		if(num_episode_ > 10 && !fallen_error){
 			curr_tolerance_ += -0.05;
+			curr_imitation_ += 1e-7; 
 		}
-		if(fallen_)
-			curr_tolerance_ += 0.1;
+
+		if(fallen_error){
+			curr_tolerance_ += 0.25;
+			curr_imitation_ -= 2e-7;
+		}
+
 		if(curr_tolerance_ < 2)
 			curr_tolerance_ = 2;
+
+		if(curr_imitation_ > 1e-4)
+			curr_imitation_ = 1e-4;
+
 		num_episode_++;
+
+		if(visualizable_)
+			std::cout<<"Fallen: "<<fallen_error<<"   Curr tolerance: "<<curr_tolerance_<<std::endl;
+
+		//IT must go at the end of the episode
+		fallen_ = false;
+		fallen_error = false;
 
 	};
 
@@ -716,7 +587,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	private:
 		std::string home_path_;
-		int gcDim_, gvDim_, nJoints_,timing_,fbk_counter_,n_campione_vel_,n_campione_pos_, index_imitation_;
+		int gcDim_, gvDim_, nJoints_,timing_,fbk_counter_,n_campione_vel_,n_campione_pos_;
+		int index_imitation_[2];
 		float alfa_z_, roll_init_, pitch_init_, yaw_init_; // initial orientation of prisma prisma walker
 
 		Eigen::VectorXd m1_pos_;
@@ -729,12 +601,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		Eigen::VectorXd filtered_acc_ = Eigen::VectorXd::Zero(3);
  
  		Eigen::Quaternionf q_;
-		Eigen::VectorXd campioni_acc_integrazione_x_ = Eigen::VectorXd::Zero(15);
-		Eigen::VectorXd campioni_acc_integrazione_y_ = Eigen::VectorXd::Zero(15);
-		Eigen::VectorXd campioni_acc_integrazione_z_ = Eigen::VectorXd::Zero(15);
-		Eigen::VectorXd campioni_vel_integrazione_x_ = Eigen::VectorXd::Zero(15);
-		Eigen::VectorXd campioni_vel_integrazione_y_ = Eigen::VectorXd::Zero(15);
-		Eigen::VectorXd campioni_vel_integrazione_z_ = Eigen::VectorXd::Zero(15);
+	 	double error_penalty_;
 		double mean_value_x_ = 0.0;double mean_value_y_ = 0.0;double mean_value_z_ = 0.0;
 		Eigen::VectorXd real_lin_acc_ = Eigen::VectorXd::Zero(3);
 
@@ -755,20 +622,20 @@ class ENVIRONMENT : public RaisimGymEnv {
 		raisim::Mat<3,3> rot_;
 		size_t foot_center_, footIndex_, foot_sx_ ,foot_dx_, contact_;
 		raisim::CoordinateFrame footframe_,frame_dx_foot_,frame_sx_foot_;
-		raisim::Vec<3> vel_, ang_vel_, vel_sx_, vel_dx_, ang_vel_sx_, ang_vel_dx_, footPosition_, footPosition_Sx_, footPosition_Dx_;
+		raisim::Vec<3> vel_, ang_vel_, vel_sx_, vel_dx_, ang_vel_sx_, ang_vel_dx_, footPosition_;
 		/// these variables are not in use. They are placed to show you how to create a random number sampler.
 		std::normal_distribution<double> normDist_;
 		RandomNumberGenerator<float> rn_;
 		Actuators motors;
 
-		double slip_term_sxdx_, slip_term_;
+		double slip_term_;
 		double previous_height_, max_height_, clearance_foot_ = 0;
 		bool max_clearence_ = false;
 		Eigen::Vector3d command_;
 
-		std::chrono::duration<double, std::milli> elapsed_time_[3]; 
+		std::chrono::duration<double, std::milli> elapsed_time_; 
 		std::chrono::duration<double, std::milli> swing_time_; 
-		std::chrono::steady_clock::time_point begin_[3], lift_instant_, land_instant_;
+		std::chrono::steady_clock::time_point start_, lift_instant_, land_instant_;
 		std::map<std::string,int> cF_ = {
 			{"center_foot", 0},
 			{"lateral_feet", 0},
@@ -778,7 +645,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 		Eigen::VectorXd joint_history_pos_reshaped_, joint_history_vel_reshaped_;
 		double H_ = 0.0;
 		int num_episode_ = 0;
-		double ang_vel_term_contact_ = 0;
 		double previous_reward_, lin_reward_, ang_reward_ = 0;
 		
 		int previous_contact;
@@ -791,7 +657,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		bool gonext_ = false;
 		float swing_penalty_;
 		int offset_, curr_index_; 
-		bool fallen_ = false;
+		bool fallen_, fallen_error = false;
 		int actual_step_;
 		double error_m1_ = 0, error_m2_ = 0;
 		const float sigma = 0.23;

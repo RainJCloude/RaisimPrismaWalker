@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import datetime
 import argparse
+import pickle as pk
 
 
 # task specification
@@ -68,8 +69,8 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 #tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
 lam = [0.9, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1]
 gamma = [0.995, 0.996, 0.997, 0.998, 0.999, 1]
-#gamma = [0.998]
-#lam = [0.95]
+gamma = [0.9985]
+lam = [0.98]
 rew_dict = {}
 done_dict = {}
 for j in gamma:
@@ -79,7 +80,6 @@ for j in gamma:
                             lam = i, gamma = j)  
 
         rew_and_done_folder = os.path.join(saver.data_dir, "dicts")
-
         print("lambda = ", i)
         ppo = PPO.PPO(actor=actor,
                     critic=critic,
@@ -100,7 +100,7 @@ for j in gamma:
         record_flag = False
         first_reward = 0
         average_ll_performance = 0
-        for update in range(301):            
+        for update in range(4000):            
             start = time.time()
             env.reset()
             reward_ll_sum = 0
@@ -144,13 +144,14 @@ for j in gamma:
             # actual training
             for step in range(n_steps): #n_steps 400
                 obs = env.observe() #dim 120 (immagino sia (generalized coordinate+njoints)*num_envs)
+                joint_ref = ppo.actTo(obs)
                 action = ppo.act(obs)
-                #print(np.size(action))
                 reward, dones = env.step(action)
         
                 ppo.step(value_obs=obs, rews=reward, dones=dones)
                 done_sum = done_sum + np.sum(dones)
                 reward_ll_sum = reward_ll_sum + np.sum(reward)
+                
             # take st step to get value obs
             obs = env.observe()
             #print(np.size(obs)) #120
@@ -169,7 +170,7 @@ for j in gamma:
                 print("Fail")
                 break"""
 
-            if average_ll_performance > best_rewards and update >75:
+            if average_ll_performance > best_rewards and update >300:
                 best_rewards = average_ll_performance
 
                 torch.save({
@@ -200,12 +201,13 @@ for j in gamma:
                                                                             * cfg['environment']['control_dt'])))
             print('----------------------------------------------------\n')
         
-        with open(rew_and_done_folder + "/rew.pkl", 'wb') as file:  #wb stands for write binary
-            dump(rew_dict, file)
-            file.close()
+            if(update > 500):
+                with open(rew_and_done_folder + "/rew.pkl", 'wb') as file:  #wb stands for write binary
+                    pk.dump(rew_dict, file)
+                    file.close()
 
-        with open(rew_and_done_folder + "/done.pkl", 'wb') as file:  #wb stands for write binary
-            dump(done_dict, file)
-            file.close()            
+                with open(rew_and_done_folder + "/done.pkl", 'wb') as file:  #wb stands for write binary
+                    pk.dump(done_dict, file)
+                    file.close()            
 
 

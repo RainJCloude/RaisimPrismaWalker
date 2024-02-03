@@ -97,7 +97,7 @@ class Actuators {
 			double dxl_pos;
 			double dxl_vel;
 
-			//Da segmentation fault se i motori non sono connessi
+			//Da segmentation fault se i motori non sono connessi e la chiami lo stesso
 			group_->sendFeedbackRequest(); // Sends a request to the modules for feedback and immediately returns
 
 			group_->getNextFeedback(Gfeedback_);

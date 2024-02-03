@@ -10,7 +10,7 @@ environment:
   simulation_dt: 0.001
   control_dt: 0.01
   max_time: 6
-  action_std: 0.1
+  action_std: 0.2
   num_seq: 5
   num_seq_vel: 5
   reward:
@@ -19,17 +19,19 @@ environment:
     lin_vel:
       coeff: 0.05
     imitation:
-      coeff: 1
-    slipping_piede_interno:
-      coeff: -0.6
-    slipping_external_feet:
-      coeff: -0.6
+      coeff: 1.2
+    slip:
+      coeff: -0.2
     angular_penalty:
       coeff: -0.5
     dynamixel_joint:
       coeff: 0.3 ##Initialized at -10 in the reset of Environment.hpp
     Joint_velocity: 
       coeff: -0.02
+    error_penalty:
+      coeff: -1
+    standing_still:
+      coeff: -0.5
 architecture:
   policy_net: [512, 256, 128]
   value_net: [512, 256, 128]
