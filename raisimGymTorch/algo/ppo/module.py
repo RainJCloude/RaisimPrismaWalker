@@ -8,21 +8,30 @@ class Actor:
     def __init__(self, architecture, distribution, device='cpu'):
         super(Actor, self).__init__()
 
-        self.architecture = architecture
+        self.architecture = architecture #This is the object of the class. From this you need the attribute architecture
         self.distribution = distribution
         self.architecture.to(device)
         self.distribution.to(device)
         self.device = device
         self.action_mean = None
 
+    def sample_with_to(self, obs):
+        
+        self.jointTraj = self.architecture.architectureTo(obs).cpu().numpy()
+
+        actions_to, log_prob_to = self.distribution.sample(self.jointTraj)
+
+        return actions_to, log_prob_to
+    
     def sample(self, obs):
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
+
         actions, log_prob = self.distribution.sample(self.action_mean)
         return actions, log_prob
 
     def evaluate(self, obs, actions):
         self.action_mean = self.architecture.architecture(obs)
-        return self.distribution.evaluate(self.action_mean, actions)
+        return self.distribution.evaluate(self.action_mean, actions) #actions are the batch of action that we stored. action_mean are the actual output of the network when you insert the batch of obs
 
     def parameters(self):
         return [*self.architecture.parameters(), *self.distribution.parameters()]
@@ -85,8 +94,19 @@ class MLP(nn.Module):
             #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
             scale.append(np.sqrt(2))
 
+        modulesTO = [nn.Linear(input_size, shape[0]), self.activation_fn()]
+        for idx in range(len(shape)-1):
+            modulesTO.append(nn.Linear(shape[idx], shape[idx+1]))
+            modulesTO.append(self.activation_fn())
+            #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
+            scale.append(np.sqrt(2))
+
         modules.append(nn.Linear(shape[-1], output_size))
+        modulesTO.append(nn.Linear(shape[-1], 1000))
+
         self.architecture = nn.Sequential(*modules)
+        self.architectureTo = nn.Sequential(*modulesTO)
+
         scale.append(np.sqrt(2))
 
         self.init_weights(self.architecture, scale)

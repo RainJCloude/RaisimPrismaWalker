@@ -5,33 +5,33 @@ environment:
   render: True
 # just testing commenting
   num_envs: 100
-  eval_every_n: 100
+  eval_every_n: 150
   num_threads: 30
   simulation_dt: 0.001
   control_dt: 0.01
-  max_time: 6
-  action_std: 0.2
+  max_time: 8
+  action_std: 0.1
   num_seq: 5
   num_seq_vel: 5
   reward:
     torque:
-      coeff: -0.00008
-    lin_vel:
-      coeff: 0.05
+      coeff: -0.000025
     imitation:
-      coeff: 1.2
+      coeff: 0.8
     slip:
-      coeff: -0.2
-    angular_penalty:
-      coeff: -0.5
-    dynamixel_joint:
-      coeff: 0.3 ##Initialized at -10 in the reset of Environment.hpp
-    Joint_velocity: 
-      coeff: -0.02
+      coeff: -0.4
     error_penalty:
       coeff: -1
-    standing_still:
-      coeff: -0.5
+    angular_penalty:
+      coeff: -0.3
+    dynamixel_joint:
+      coeff: 0.3 
+    Joint_velocity: 
+      coeff: -0.001
+    BodyMovementWithLateralFeet:
+      coeff: -0.3
+    ground_clearence:
+      coeff: 0.2
 architecture:
   policy_net: [512, 256, 128]
   value_net: [512, 256, 128]

@@ -25,7 +25,30 @@ def print_loss(x, y ):
 
     plt.legend()
     plt.grid()
-    
+
+
+def read_points_from_file(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            points = [tuple(map(float, line.strip().split(','))) for line in file]
+        return points
+    except FileNotFoundError:
+        print(f"File not found: {file_path}")
+        return []
+
+def print_points(points):
+    for point in points:
+        print(f"Point: {point[0]}, {point[1]}")
+
+if __name__ == "__main__":
+    file_path = input("Enter the path to the text file: ")
+    points = read_points_from_file(file_path)
+
+    if points:
+        print("\nPoints read from file:")
+        print_points(points)
+    else:
+        print("No points to display.")
 
 
 # Example usage

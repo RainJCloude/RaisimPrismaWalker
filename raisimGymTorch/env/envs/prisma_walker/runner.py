@@ -88,7 +88,7 @@ for j in gamma:
                     num_learning_epochs=3,  #4 in origine
                     gamma=j,
                     lam=i, #0.95
-                    num_mini_batches=4, #4 in origine
+                    num_mini_batches=4,
                     device=device,
                     log_dir=saver.data_dir,
                     shuffle_batch=False,
@@ -144,10 +144,8 @@ for j in gamma:
             # actual training
             for step in range(n_steps): #n_steps 400
                 obs = env.observe() #dim 120 (immagino sia (generalized coordinate+njoints)*num_envs)
-                joint_ref = ppo.actTo(obs)
                 action = ppo.act(obs)
                 reward, dones = env.step(action)
-        
                 ppo.step(value_obs=obs, rews=reward, dones=dones)
                 done_sum = done_sum + np.sum(dones)
                 reward_ll_sum = reward_ll_sum + np.sum(reward)
@@ -201,13 +199,13 @@ for j in gamma:
                                                                             * cfg['environment']['control_dt'])))
             print('----------------------------------------------------\n')
         
-            if(update > 500):
+            """if(update > 500):
                 with open(rew_and_done_folder + "/rew.pkl", 'wb') as file:  #wb stands for write binary
                     pk.dump(rew_dict, file)
                     file.close()
 
                 with open(rew_and_done_folder + "/done.pkl", 'wb') as file:  #wb stands for write binary
                     pk.dump(done_dict, file)
-                    file.close()            
+                    file.close()    """        
 
 

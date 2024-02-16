@@ -48,7 +48,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		prisma_walker = world_->addArticulatedSystem(home_path_ + "/rsc/prisma_walker/urdf/prisma_walker.urdf");
 		prisma_walker->setName("prisma_walker");
 		prisma_walker->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
-		world_->addGround();
+		world_->addGround(0, "ground");
 		Eigen::Vector3d gravity_d(0.0,0.0,0);
 		/// get robot data
 		gcDim_ = prisma_walker->getGeneralizedCoordinateDim();
@@ -81,8 +81,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		nextMotorPositions_.setZero(2*num_seq);
 
 		current_action_.setZero(3);
-		index_imitation_[0] = 0;
-		index_imitation_[1] = 0;
+		index_imitation_ = 0;
 		prisma_walker->setPdGains(jointPgain, jointDgain);
 		prisma_walker->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
@@ -102,7 +101,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 		
 		// Open port
 		actionStd_.setConstant(action_std);
-		NumberIteration_ = 0;
 		/// Reward coefficients
 		rewards_.initializeFromConfigurationFile (cfg["reward"]);
 
@@ -112,8 +110,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		foot_sx_ = prisma_walker->getFrameIdxByLinkName("piede_sx");
 		foot_dx_ = prisma_walker->getFrameIdxByLinkName("piede_dx");
 
-		m1_pos_.setZero(925);
-		m2_pos_.setZero(1121); 
+		m1_pos_.setZero(traj_size);
+		m2_pos_.setZero(traj_size); 
 		/// visualize if it is the first environment
 		if (visualizable_) {
 			server_ = std::make_unique<raisim::RaisimServer>(world_.get());
@@ -124,12 +122,58 @@ class ENVIRONMENT : public RaisimGymEnv {
 		num_episode_ = 0;
 		curr_vel_ = 0;
 		curr_imitation_ = 1e-6;
-		keyPoint_(10);
 		curr_index_ = 0;
-		curr_tolerance_ = 10;
-		 
-		motors.initHandlersAndGroup(ActuatorConnected_, num_seq, num_seq_vel, visualizable_);
+		actual_step_ = 0;
+	 	clearance_foot_ = 0.0; //penalita' iniziale. Altrimenti non alzera' mai il piede
 
+		//motors.initHandlersAndGroup(ActuatorConnected_, num_seq, num_seq_vel, visualizable_);
+		openFile();
+
+		for(int i = 0; i < prisma_walker->getMass().size(); i++){
+      		realMass_.push_back(prisma_walker->getMass()[i]);	//it has 4 links (it takes into account only the bodies with not fixed joints)
+			//std::cout<<realMass_[i]<<std::endl;
+			//the link 0 is the base with the fixed legs m = 0.951376
+			//link 1 is that attached to the first hebi m = 0.24
+			//link 2 is that attached to the second hebi m = 0.1175
+			//link 3 is the foot attached to the dynamixel m = 0.286
+		}
+		
+		prisma_walker->getCollisionBody("piede_interno/0").setMaterial("foot");
+
+		currRand_jointPos_.setZero(gcDim_ - 3); // 7 elements
+		currRand_jointVel_.setZero(gvDim_ - 3); // 6 elements
+		disturbanceFactor_ = 0.5;
+		/*torques.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/torques.txt");
+		torques << "Hebi 1 torque" << "\t" << "Hebi 2 torque" << "\t" << "M3 torque" << "\n"; */
+	}
+
+	void openFile(){
+
+		std::fstream m1_traj;
+    	std::fstream m2_traj;
+
+		m1_traj.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/pos_m1_18s.txt", std::ios::in);
+    	m2_traj.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/pos_m2_18s.txt", std::ios::in);
+	
+		Eigen::VectorXd m1_pos(traj_size);
+		Eigen::VectorXd m2_pos(traj_size);
+
+		if(m1_traj.is_open() && m2_traj.is_open()){
+			for(int j = 0;j<traj_size;j++){
+				m1_traj >> m1_pos(j);  //one character at time store the content of the file inside the vector
+
+				m1_pos_=-m1_pos;
+
+				m2_traj >> m2_pos(j);
+
+				m2_pos_=-m2_pos;
+			}
+		}
+		else
+			std::cout<<"File not opend!"<<std::endl;
+		
+		m1_traj.close(); 
+		m2_traj.close();
 	}
 
 
@@ -138,6 +182,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		command_[1] = v_y;
 		command_[2] = omega_z;
 		std::cout<<"command_vel: "<<command_<<std::endl;
+		fallen_ = false;
 	}
 
 	void init() final { 
@@ -147,59 +192,34 @@ class ENVIRONMENT : public RaisimGymEnv {
 	}     
 
 	void reset() final {
-		
+
+		setFriction();
+
 		previous_height_ = 0;
 		alfa_z_ = 0;
-		max_height_ = 0;
-		clearance_foot_ = 0.1; //penalita' iniziale. Altrimenti non alzera' mai il piede
-
-		std::ifstream m1_traj;  //fstream is for both input and output, but hen you need to specify with std::ios::in
-    	std::ifstream m2_traj;
-
-		m1_traj.open("m1.txt", std::ios::in);
-    	m2_traj.open("m2.txt", std::ios::in);
-	
-		Eigen::VectorXd m1_pos(num_row_in_file);
-		Eigen::VectorXd m2_pos(num_row_in_file);
-
-		if(m1_traj.is_open() && m2_traj.is_open()){
-
-			for(int j = 0; j<m1_pos_.size() ;j++)
-				m1_traj >> m1_pos_(j);  //one character at time store the content of the file inside the vector
-				//m1_pos_=-m1_pos;
-			for(int j = 0; j<m2_pos_.size() ;j++)
-				m2_traj >> m2_pos_(j);
-				//m2_pos_=-m2_pos;
-	
-		}
 		
-		m1_traj.close(); 
-		m2_traj.close();
-		previous_contact = 0;
+		if((fallen_ && rn_.intRand(0,7) == 1) || rn_.intRand(0,20) == 1){
+			index_imitation_ = traj_size*rn_.sampleUniform01();
 
+			gc_init_[7] = m1_pos_(index_imitation_ - 1);
+			gc_init_[8] = m2_pos_(index_imitation_ - 1);
 
-		if(fallen_){
-			index_imitation_[0] = 1818*rn_.sampleUniform01();
-			index_imitation_[1] = 1818*rn_.sampleUniform01();
-
-			gc_init_[7] = m1_pos_(index_imitation_[0] - 1);
-			gc_init_[8] = m2_pos_(index_imitation_[1] - 1);
+			initBodyPos_ =  rot_.e().transpose() * gc_init_.segment(0, 3);
+			initFootPos_ =  rot_.e().transpose() * footPosition_.e();
+			initFootPos_ = initFootPos_ - initBodyPos_;
+			
 		}
-	
+
+		if(fallen_ && num_episode_ > 1000)
+			reduceRand();
+
 
 		prisma_walker->setState(gc_init_, gv_init_);
 		updateObservation();
-	
-		NumberIteration_ = 0;
-		offset_ = 1;
-		//Curriculum
-		
-		countForCurriculum_ = 0;
 
-		error_penalty_ = 0;
 		swing_penalty_ = 0; //Da usare solo in caso di penalty
 		previous_contact = 1; //Parte da piede a terra e quindi va a 1
-		actual_step_ = 0;
+		error_penalty_ = 0;
 	}
 	
  
@@ -207,12 +227,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 		/// action scaling
 		pTarget3_ = action.cast<double>(); //dim=n_joints
 		pTarget3_ = pTarget3_.cwiseProduct(actionStd_);
-
-		actionMean_ << m1_pos_(index_imitation_[0]), m2_pos_(index_imitation_[1]), 0.0;
+		actionMean_ << m1_pos_(index_imitation_), m2_pos_(index_imitation_), 0.0;
 		pTarget3_ += actionMean_;
 		pTarget_.tail(nJoints_) << pTarget3_;
 		current_action_ = pTarget3_;
-
 	    if(ActuatorConnected_){
 			motors.sendCommand(pTarget3_);
 		}
@@ -220,6 +238,15 @@ class ENVIRONMENT : public RaisimGymEnv {
 			prisma_walker->setPdTarget(pTarget_, vTarget_);
 		}
 
+		/*
+		Eigen::Vector3d torque;
+
+		torque << 20*(gc_[7] - pTarget3_[0]) + 2*gv_[6],
+				  20*(gc_[8] - pTarget3_[1]) + 2*gv_[7],
+				  20*(gc_[9] - pTarget3_[2]) + 2*gv_[8];
+
+		torques << torque[0] << std::setw(5) << torque[1] << std::setw(5) << torque[2] << std::setw(5);
+		torques <<"\n";*/
 
 		for(int i=0; i< int(control_dt_ / simulation_dt_ + 1e-10); i++){
 			if(server_) server_->lockVisualizationServerMutex();
@@ -228,137 +255,127 @@ class ENVIRONMENT : public RaisimGymEnv {
 		}
 
 		updateObservation(); //Ricordati che va prima di fare tutti i conti
-
 		contacts(); //va dopo il world integrate, perche' il world integrate aggiorna i contatti. 
- 
+		imitation_function();
+		external_force();
+
 		rewards_.record("torque", prisma_walker->getGeneralizedForce().squaredNorm());
-		rewards_.record("Joint_velocity", gv_.segment(6,2).squaredNorm());
-		rewards_.record("Joint_velocity", 5*gv_.tail(1).squaredNorm());
-
+		//rewards_.record("Joint_velocity", curr_fact* gv_.segment(6,2).squaredNorm());
+		//rewards_.record("Joint_velocity", curr_fact*5*gv_.tail(1).squaredNorm());
 		rewards_.record("error_penalty", error_penalty_);
-
-		rewards_.record("imitation", imitation_function());
-		rewards_.record("dynamixel_joint", std::exp(-2*(1/sigma)*gc_[9]*gc_[9]));
-		rewards_.record("angular_penalty", 0.05*(bodyAngularVel_[0] + bodyLinearVel_[1]));
-		rewards_.record("slip", slip_term_);
-		rewards_.record("standing_still", standingStill_);
+		double errorImit = std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_));
+		rewards_.record("imitation", errorImit);
+		//rewards_.record("dynamixel_joint", std::exp(-2*(1/sigma)*gc_[9]*gc_[9]));
+		rewards_.record("angular_penalty", bodyAngularVel_[0] + bodyAngularVel_[1]); //+0.025*bodyLinearVel_[2]
+		rewards_.record("slip", curr_fact_slip_*slip_term_);
+		rewards_.record("ground_clearence", clearance_foot_);
+		if(visualizable_){
+			if(isnan(errorImit))
+				std::cout<<"Erroror imitation"<<std::endl;
+			if(isnan(slip_term_))
+				std::cout<<"Error slp term"<<std::endl;
+			if(isnan(clearance_foot_))
+				std::cout<<"Error clearance_foot_term"<<std::endl;		
+			if(isnan(error_penalty_))
+			std::cout<<"Error penalty term"<<std::endl;
+		}
+		if(cF_["center_foot"] == 0)
+			rewards_.record("BodyMovementWithLateralFeet", bodyLinearVel_.squaredNorm() + bodyAngularVel_.squaredNorm());
+		//rewards_.record("air_foot", SwingPenalty());
 
 		actual_step_++;	
 		if(actual_step_ == num_step){
 			gc_init_[7] = gc_[7];
 			gc_init_[8] = gc_[8];
 		}
- 
+
+		//std::cout<<slip_term_<<std::endl;	
+
+		incrementIndices();
 		return rewards_.sum();
-		
+	
 	}
 
-	float SwingPenalty(){
-		if(swing_time_ > std::chrono::duration<double, std::milli>(1) ){
-			swing_penalty_ += 0.01;	
-		}
-		else{
-			swing_penalty_ = 0;
-		}
-		return swing_penalty_;
+	void incrementIndices(){
 
+		index_imitation_++;
+
+		if(index_imitation_ > traj_size){
+			index_imitation_ = 0;
+		}
+	}
+	
+	void discardIndices(){
+		double distance_m1 = 0;
+		double distance_m2 = 0;
+		do{
+			index_imitation_ ++;
+			distance_m1 = std::abs(m1_pos_(index_imitation_) - m1_pos_(index_imitation_ + 1));
+			distance_m2 = std::abs(m2_pos_(index_imitation_) - m2_pos_(index_imitation_ + 1));
+		}while( distance_m1 < curr_imitation_ && distance_m2 < curr_imitation_);
 	}
 
-	float imitation_function (){
+	void imitation_function(){
 		
-	 
-		index_imitation_[0] += 1;
-		index_imitation_[1] += 1;
-
-		if(index_imitation_[0] > 925)
-			index_imitation_[0] = 0;
-
-		if(index_imitation_[1] > 1121)
-			index_imitation_[1] = 0;
-
-		
-		
-		error_m1_ = gc_[7] - m1_pos_(index_imitation_[0]);
-		error_m2_ = gc_[8] - m2_pos_(index_imitation_[1]);
-		double gaussian_kernel = std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_));
-		
-		return gaussian_kernel;
-
+		error_m1_ = gc_[7] - m1_pos_(index_imitation_);
+		error_m2_ = gc_[8] - m2_pos_(index_imitation_);
 	}
  
-	float norm(Eigen::Vector3d vector){
-		float norma=0;
-		norma = sqrt(pow(vector(0),2)+pow(vector(1),2)+pow(vector(2),2));
-
-		return norma;
-	}
-
 
 	void clearance(){
-		if(cF_["center_foot"]==0){  //Swing phase
-			if(previous_height_ > footPosition_[2]){// descent phase
-				if(max_clearence_){ //during all the descendant phase, the agent receive the same penalty because wasnt able to lift enough the foot
-					clearance_foot_ = previous_height_;
-					max_clearence_ = false;
-					//RSINFO_IF(visualizable_, "clearance: ", clearance_foot_)
-				}
-			}else{  //rising phase 
-				previous_height_ = footPosition_[2];    
-				max_clearence_ = true;
-			}	
-		}
-		else
+	
+		if(bodyFootPos_[0] >= posForFootHitGround_ && initFootPos_[0] <= posForFootHitGround_){
+			sigma_square = sigma*sigma;
+			curr_fact = 1;
+			if(previous_height_ > footPosition_[2]){ 
+				clearance_foot_ = std::exp(-50*(previous_height_ - targetHeight_)*(previous_height_ - targetHeight_));
+			}
+			else{
+				previous_height_ = footPosition_[2];
+				curr_fact = 2;
+			}
+		} 
+
+		if(cF_["center_foot"]==1){
 			previous_height_ = 0;
+			initFootPos_[0] = -1; //become negative the fullfill the previous condition
+		}
 
 	}
 
+
 	void slippage(){
+		
 		slip_term_ = 0;
 		if(cF_["center_foot"] == 1 || footPosition_[2] < 0.001){
-			slip_term_ += std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
+			slip_term_ = std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
 		}	
+
+		if(cF_["center_foot"] == 1 && cF_["lateral_feet"] == 1 && index_imitation_ > 800 && index_imitation_ < 1600){
+			if(slip_term_ > 0)
+				posForFootHitGround_ -= 0.01;
+				curr_fact_slip_ += 0.01;
+		}
 	}
 
     void swapMatrixRows(Eigen::Matrix3d &mat){		
-                  Eigen::Vector3d temp;
-                  //riga x-> z
-                  temp = mat.row(2); 
-                  mat.row(2) = mat.row(0);
-                  //riga y>x
-                  mat.row(0) = mat.row(1);
-                  //row z->y
-                  mat.row(1) = temp;
+		Eigen::Vector3d temp;
+		//riga x-> z
+		temp = mat.row(2); 
+		mat.row(2) = mat.row(0);
+		//riga y>x
+		mat.row(0) = mat.row(1);
+		//row z->y
+		mat.row(1) = temp;
     }
 
-	
-	void error_vel(){
-		if(cF_["center_foot"]==1){
-			double err_x = command_[0] - bodyLinearVel_[0];
-			double err_omega = command_[2] - bodyAngularVel_[2];
-			lin_reward_ =  std::exp(-5*err_x*err_x);
-			ang_reward_ =  std::exp(-15*err_omega*err_omega);
-			previous_reward_ = lin_reward_ + ang_reward_;
-		}else{		
-			if(swing_time_ >= std::chrono::duration<double, std::milli>(1500) ){
-				lin_reward_ += -0.1;
-				ang_reward_ += -0.1;
-			}
-		}
-	}
-
-	void mean_square_error(){
-		double err_x = command_[0] - bodyLinearVel_[0];
-		double err_omega = command_[2] - bodyAngularVel_[2];
-		vel_rew_ += (err_x*err_x) + (err_omega*err_omega);   //se la fase di swing dura poco fa poche iterazioni!!!!!!
-	}
 
 	void contacts(){
 		
-		prisma_walker->getFramePosition(foot_center_, footPosition_);
-	
+		prisma_walker->getFrameVelocity(foot_center_, vel_);
+
 		cF_["center_foot"] = 0;
 		cF_["lateral_feet"] = 0;
-
 		for(auto& contact: prisma_walker->getContacts()){
 			if (contact.skip()) continue;  //contact.skip() ritorna true se siamo in una self-collision, in quel caso ti ritorna il contatto 2 volte
 			if(contact.getlocalBodyIndex() == 3 ){
@@ -369,27 +386,11 @@ class ENVIRONMENT : public RaisimGymEnv {
 			}      
 		}
 
-		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-
-		if(cF_["center_foot"] == 1 && cF_["lateral_feet"] == 1){
-			elapsed_time_ += std::chrono::duration<double, std::milli>(end - start_); 
-			start_ = std::chrono::steady_clock::now();
-			if(elapsed_time_ > std::chrono::duration<double, std::milli>(1000))
-				standingStill_ += 1;
-		}
-		else{
-			standingStill_ = 0;
-			elapsed_time_ = std::chrono::duration<double, std::milli>(0);
-			start_ =  std::chrono::steady_clock::now();
-		}
-
 		slippage();
 		clearance();
-		//mse_and_airTime();
 	} 
- 
 
-	inline void mse_and_airTime(){
+	inline void computeSwingTime(){
 
 		if(cF_["center_foot"] == 1){  //NON TENERE LE COSE DENTRO IL FOR, PERCHè Altrimenti chiama le stesse funzioni piu' VOLTE!!!
 			if(previous_contact == 0 && cF_["center_foot"]==1){ //piede atterra
@@ -397,7 +398,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 			}
 			lift_instant_ = std::chrono::steady_clock::now();
 			//mean_square_error();
-			NumberIteration_ ++;
 		}
 
 		previous_reward_ = 0;
@@ -406,36 +406,19 @@ class ENVIRONMENT : public RaisimGymEnv {
 			land_instant_ = std::chrono::steady_clock::now();
 			swing_time_ += std::chrono::duration<double, std::milli>(land_instant_ - lift_instant_);
 			lift_instant_ = std::chrono::steady_clock::now();
-
-			/*if(previous_contact == 1 && cF_["center_foot"]==0){// Inizia a sollevare-> Robot Fermo
-				bool start = true;
-				
-				/*mean_vel_rew_ = rew_x_ / NumberIteration_; //Riempe previous vel con l'errore medio
-				NumberIteration_ = 1;
-				vel_rew_ = 0;
-			}		*/
 		}
 
 		previous_contact = cF_["center_foot"];		
 
-		//RSINFO_IF(visualizable_, "swing time: "<< swing_time_.count())
-		//RSINFO_IF(visualizable_, "error vel: "<< mean_rew_x_)
 		swing_time_d = swing_time_.count()/1000;
- 
 	}
 
-
-
-	void generate_command_velocity(){ 
-		command_[0] = 0;
-		command_[2] = 0;
-	}
-		
 
 	void updateObservation() {
 		
-		nextMotorPositions_ << m1_pos_(index_imitation_[0]), m1_pos_(index_imitation_[0] + 1), m1_pos_(index_imitation_[0] +2), m2_pos_(index_imitation_[1]), m2_pos_(index_imitation_[1] + 1), m2_pos_(index_imitation_[1] +2);
+		nextMotorPositions_ << m1_pos_(index_imitation_), m1_pos_(index_imitation_ + 1), m1_pos_(index_imitation_ +2), m2_pos_(index_imitation_), m2_pos_(index_imitation_ + 1), m2_pos_(index_imitation_ +2);
 		//Il giunto di base e' fisso rispetto alla base. Quindi l'orientamento della base e' quello del motore 
+		
 		if(ActuatorConnected_)
 		{ 	//If motors are not connected you get a seg fault om the sendRequest
 			Eigen::VectorXd obs_motors = motors.getFeedback();
@@ -448,19 +431,40 @@ class ENVIRONMENT : public RaisimGymEnv {
 		}else{
 			prisma_walker->getState(gc_, gv_);//generalized coordinate generalized velocity wrt initial coordinate gc_init
 			updateJointHistory();
-			
+
 			quat_[0] = gc_[3]; 
 			quat_[1] = gc_[4]; 
 			quat_[2] = gc_[5]; 
 			quat_[3] = gc_[6];
-			raisim::quatToRotMat(quat_, rot_);
-			bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3); //linear velocity reported to the base frame
-			bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);			
 
+			raisim::quatToRotMat(quat_, rot_); 
+
+			bodyPos_ = rot_.e().transpose() * gc_.segment(0, 3);  //position of the robot reported to the body frame
+			prisma_walker->getFramePosition(foot_center_, footPosition_);
+			bodyFootPos_ = rot_.e().transpose() * footPosition_.e();
+			bodyFootPos_ = bodyFootPos_ - bodyPos_; //otherwise it changes only when I move the foot, it must be changed also when the robot moves the body
+
+			for(int i = 0; i < currRand_jointPos_.size(); i++)
+				gc_[i+3] += currRand_jointPos_[i]*rn_.sampleUniform(); 
+ 
+			for(int i = 0; i < currRand_jointVel_.size(); i++)
+				gv_[i] += currRand_jointPos_[i]*rn_.sampleUniform();		 
+
+			quat_[0] = gc_[3]; 
+			quat_[1] = gc_[4]; 
+			quat_[2] = gc_[5]; 
+			quat_[3] = gc_[6];
+
+			raisim::quatToRotMat(quat_, rot_randomized_); 
+
+		
+			bodyLinearVel_ = rot_.e().transpose() * gv_.segment(0, 3); //linear velocity reported to the base frame
+			bodyAngularVel_ = rot_.e().transpose() * gv_.segment(3, 3);
+	
 			obDouble_ << rot_.e().row(1).transpose(),
-			rot_.e().row(2).transpose(), /// body orientation e' chiaro che per la camminata, e' rilevante sapere come sono orientato rispetto all'azze z, e non a tutti e 3. L'orientamento rispetto a x e' quanto sono chinato in avanti, ma io quando cammino scelgo dove andare rispetto a quanto sono chinato??? ASSOLUTAMENTE NO! Anzi, cerco di non essere chinato. Figurati un orentamento rispetto a y, significherebbe fare la ruota sul posto
-			bodyAngularVel_, /// body linear&angular velocity
-			joint_history_pos_, /// joint angles
+			rot_.e().row(2).transpose(), /// body orientation e' chiaro che per la camminata, e' rilevante sapere come sono orientato rispetto all'azze z, e non a tutti e 3. L'orientamento rispetto a x e' quanto sono chinato in avanti, ma io quando cammino scelgo dove andare rispetto a quanto sono chinato??? ASSOLUTAMENTE NO! Anzi, cerco di non essere chinato. Figurati un orentamento rispetto a y, significherebbe fare la ruota sul posto /// body linear&angular velocity
+			bodyAngularVel_,
+			joint_history_pos_, ///
 			joint_history_vel_,
 			current_action_,
 			error_m1_,
@@ -494,10 +498,13 @@ class ENVIRONMENT : public RaisimGymEnv {
 			std::cout<<"Joint pos: "<< joint_history_pos_<< std::endl;
 			std::cout<<"Joint vel: "<< joint_history_vel_<< std::endl;
 		}*/
+		Eigen::Vector3d randVecThree;
 
-	
-		joint_history_pos_.tail(3) = gc_.tail(3);
-		joint_history_vel_.tail(3) = gv_.tail(3);
+		randVecThree << 2*rn_.sampleUniform(), 2*rn_.sampleUniform(), 2*rn_.sampleUniform();
+		joint_history_pos_.tail(3) = gc_.tail(3) + randVecThree;
+
+		randVecThree << 2*rn_.sampleUniform(), 2*rn_.sampleUniform(), 2*rn_.sampleUniform();
+		joint_history_vel_.tail(3) = gv_.tail(3) + randVecThree;
 		
 		//Reshaping della time series
 
@@ -527,115 +534,221 @@ class ENVIRONMENT : public RaisimGymEnv {
 		Eigen::Vector3d z_vec = Eigen::Vector3d::Zero();
 		Eigen::Vector3d z_axis(0,0,1);
 		z_vec = rot_.e().row(2).transpose();
-		alfa_z_ = acos((z_vec.dot(z_axis))/norm(z_vec));
+		alfa_z_ = acos(z_vec.dot(z_axis));
 		alfa_z_ = (alfa_z_*180)/M_PI;
 	
 		//RSINFO_IF(visualizable_, alfa_z_*alfa_z_)
-		if(alfa_z_>25){
-			RSINFO_IF(visualizable_, "fallen for angle")
+		if(alfa_z_>18){
+			fallCount_++;
+			gc_init_[7] = m1_pos_(index_imitation_ - 100);
+			gc_init_[8] = m2_pos_(index_imitation_ - 100);
 			fallen_ = true;
 			return true;
 		}
 
-		if (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > curr_tolerance_*sigma){
-			RSINFO_IF(visualizable_, "fallen for error")
-			error_penalty_ += curr_tolerance_*0.1;
+	 
+		if (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > 6*sigma){
+			fallCount_++;
+			gc_init_[7] = m1_pos_(index_imitation_ - 100);
+			gc_init_[8] = m2_pos_(index_imitation_ - 100);
+			error_penalty_ += 0.4;
 			fallen_ = true;
-			fallen_error = true;
-			return true;
-		}
-
-		if(cF_["center_foot"] == 0 && bodyLinearVel_.squaredNorm() !=0){
 			return true;
 		}		
-
+	
+		
+		
 		terminalReward = 0.f;
 		return false;
 	}
 
+	void setFriction(){
+		double friction_coefficient = 0;
+		if(num_episode_ < 200){
+			friction_coefficient = 0.9;
+			prisma_walker->getMass()[0] = realMass_[0] + 0.07*rn_.sampleUniform() + 0.2; //add 100g of te base motor
+			prisma_walker->getMass()[1] = realMass_[1] + 0.03*rn_.sampleUniform() + 0.2; //add 100g of te base motor
+			prisma_walker->getMass()[2] = realMass_[2] + 0.02*rn_.sampleUniform() + 0.08; //add 100g of te base motor 
+			prisma_walker->getMass()[3] = realMass_[3] + 0.04*rn_.sampleUniform();
+		}
+		else if (num_episode_ < 500){
+			friction_coefficient = 0.75 + rn_.sampleUniform01() * 0.15; //linear interpolation
+			prisma_walker->getMass()[0] = realMass_[0] + 0.18*rn_.sampleUniform() + 0.2; //add 100g of te base motor
+			prisma_walker->getMass()[1] = realMass_[1] + 0.08*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[2] = realMass_[2] + 0.03*rn_.sampleUniform() + 0.08;
+			prisma_walker->getMass()[3] = realMass_[3] + 0.09*rn_.sampleUniform();
+		}
+		else if (num_episode_ < 800){
+			friction_coefficient = 0.5 + rn_.sampleUniform01() * 0.4;
+			prisma_walker->getMass()[0] = realMass_[0] + 0.30*rn_.sampleUniform() + 0.2; //add 100g of te base motor
+			prisma_walker->getMass()[1] = realMass_[1] + 0.12*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[2] = realMass_[2] + 0.04*rn_.sampleUniform() + 0.08;
+			prisma_walker->getMass()[3] = realMass_[3] + 0.15*rn_.sampleUniform();
+		}
+		else if (num_episode_ <= 1100){
+			friction_coefficient = 0.3 + rn_.sampleUniform01() * 0.2;
+			prisma_walker->getMass()[0] = realMass_[0] + 0.40*rn_.sampleUniform() + 0.2; //add 100g of te base motor
+			prisma_walker->getMass()[1] = realMass_[1] + 0.18*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[2] = realMass_[2] + 0.05*rn_.sampleUniform() + 0.08;
+			prisma_walker->getMass()[3] = realMass_[3] + 0.20*rn_.sampleUniform();
+		}
+		else if (num_episode_ > 1100){
+			friction_coefficient = 0.25 + rn_.sampleUniform01() * 0.75; //[0,25,1]
+			prisma_walker->getMass()[0] = realMass_[0] + 0.45*rn_.sampleUniform() + 0.2; //add 100g of te base motor
+			prisma_walker->getMass()[1] = realMass_[1] + 0.20*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[2] = realMass_[2] + 0.05*rn_.sampleUniform() + 0.08;
+			prisma_walker->getMass()[3] = realMass_[3] + 0.23*rn_.sampleUniform();
+		}
+		
+		prisma_walker -> updateMassInfo();
+		world_->setMaterialPairProp("ground", "foot", friction_coefficient, 0.0, 0.001); //mu, bouayancy, restitution velocity (and minimum impact velocity to make the object bounce) 
+		
+	}
+
+
 	void curriculumUpdate() {
 		//generate_command_velocity(); //La metto qui perche' la reset viene chiamata troppe volte
 
-		if(num_episode_ > 10 && !fallen_error){
-			curr_tolerance_ += -0.05;
-			curr_imitation_ += 1e-7; 
+		if(num_episode_ > 10 && !fallen_){
+			curr_imitation_ += 1e-6; 
 		}
 
-		if(fallen_error){
-			curr_tolerance_ += 0.25;
-			curr_imitation_ -= 2e-7;
+		if(fallen_ && curr_imitation_ > 1e-6){
+			curr_imitation_ -= 2e-6;
 		}
 
-		if(curr_tolerance_ < 2)
-			curr_tolerance_ = 2;
 
-		if(curr_imitation_ > 1e-4)
-			curr_imitation_ = 1e-4;
+		if(curr_imitation_ > 1e-2)
+			curr_imitation_ = 1e-2;
+		if(curr_imitation_ < 1e-6)
+			curr_imitation_ = 1e-6;
 
 		num_episode_++;
 
-		if(visualizable_)
-			std::cout<<"Fallen: "<<fallen_error<<"   Curr tolerance: "<<curr_tolerance_<<std::endl;
-
+		if(visualizable_){
+			std::cout<<"Curr imitation   "<<curr_imitation_<<std::endl;
+		}
 		//IT must go at the end of the episode
 		fallen_ = false;
-		fallen_error = false;
+		actual_step_ = 0;
 
+		if(num_episode_ > 300){
+			if(!fallen_){
+				if(disturbanceGone_ = true){
+					disturbanceFactor_ += 0.5;
+					disturbanceGone_ = false;
+				}
+
+				for(int i = 0; i < currRand_jointPos_.size(); i++){
+					if(currRand_jointPos_[i] < 3)
+						currRand_jointPos_[i] += 0.001;
+				}
+
+				for(int i = 0; i < currRand_jointVel_.size(); i++){
+					if(currRand_jointVel_[i] < 3)
+						currRand_jointVel_[i] += 0.001;
+				}
+			}
+			else{
+				reduceRand();
+			}
+		}
+
+		/*
+		if(num_episode_ % 1000 == 0){
+			if(visualizable_){
+				for(int i = 0; i < currRand_jointPos_.size(); i++)
+					std::cout<<"Randomizing factor for joint pos: "<<currRand_jointPos_[i]<<std::endl;
+
+				for(int i = 0; i < currRand_jointVel_.size(); i++)
+					std::cout<<"Randomizing factor for joint vel: "<<currRand_jointVel_[i]<<std::endl;
+			}
+		}*/
+		if(fallen_){
+			RSINFO_IF(visualizable_, "fall count = " << fallCount_)
+		}
+		fallCount_ = 0;
 	};
+
+	void reduceRand(){
+
+		if(disturbanceFactor_ > 1)
+			disturbanceFactor_ -= 0.5;
+		
+		for(int i = 0; i < currRand_jointPos_.size(); i++)
+			currRand_jointPos_[i] -= 0.001;
+
+		for(int i = 0; i < currRand_jointVel_.size(); i++)
+			currRand_jointVel_[i] -= 0.001;	
+
+		int indexPos = rn_.intRand(0,7);
+		int indexVel = rn_.intRand(0,6);
+
+		if(currRand_jointPos_[indexPos] < 3)
+			currRand_jointPos_[indexPos] += 0.001;
+
+		if(currRand_jointPos_[indexVel] < 3)
+			currRand_jointVel_[indexVel] += 0.001;
+	}
+
+	void external_force(){
+ 		raisim::Vec<3> disturbance;
+		if(rn_.intRand(0,10) == 5){
+			int bodyIndexSubjet = rn_.intRand(0,3);
+			disturbanceGone_ = true;
+			float ang = M_PI * rn_.sampleUniform01();
+			
+			disturbance[0] = disturbanceFactor_ * std::cos(ang);  //tp distribute the force
+			disturbance[1] = disturbanceFactor_ * std::sin(ang);
+			disturbance[2] = rn_.sampleUniform();
+			prisma_walker->setExternalForce(bodyIndexSubjet, disturbance);
+		}
+		
+	}
 
 
 
 	private:
 		std::string home_path_;
-		int gcDim_, gvDim_, nJoints_,timing_,fbk_counter_,n_campione_vel_,n_campione_pos_;
-		int index_imitation_[2];
+		int gcDim_, gvDim_, nJoints_,timing_,fbk_counter_,n_campione_vel_,n_campione_pos_, index_imitation_;
 		float alfa_z_, roll_init_, pitch_init_, yaw_init_; // initial orientation of prisma prisma walker
-
 		Eigen::VectorXd m1_pos_;
 		Eigen::VectorXd m2_pos_;
  
 		double smoothing_factor_ = 0.06;
-		raisim::Mat<3,3> rot_off_;
+		raisim::Mat<3,3> rot_randomized_;
 		raisim::Vec<4> quaternion_;
  
 		Eigen::VectorXd filtered_acc_ = Eigen::VectorXd::Zero(3);
  
  		Eigen::Quaternionf q_;
-	 	double error_penalty_;
-		double mean_value_x_ = 0.0;double mean_value_y_ = 0.0;double mean_value_z_ = 0.0;
 		Eigen::VectorXd real_lin_acc_ = Eigen::VectorXd::Zero(3);
 
 		Eigen::Matrix3d R_imu_base_frame_ = Eigen::Matrix3d::Zero(3,3);
-		Eigen::Matrix3d real_orientation_matrix_ = Eigen::Matrix3d::Zero(3,3);
 		Eigen::Vector3d rpy_;
 		bool visualizable_ = false;
 		raisim::ArticulatedSystem* prisma_walker;
 		Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget3_, vTarget_;
 		const int terminalRewardCoeff_ = -12.;
 		Eigen::VectorXd actionMean_, actionStd_, obDouble_;
-		Eigen::Vector3d bodyLinearVel_, bodyAngularVel_, bodyAngularVel_real_;
-		std::ofstream v_lin_sim_ = std::ofstream("v_lin_sim_40.txt");
-		std::ofstream p_sim_ = std::ofstream("p_sim_40.txt");
-		std::ofstream ori_sim_ = std::ofstream("ori_sim_40.txt");
-		std::ofstream v_ang_sim_ = std::ofstream("v_ang_sim_40.txt");
+		Eigen::Vector3d bodyLinearVel_, bodyAngularVel_, bodyAngularVel_real_, bodyFootPos_, bodyPos_, initBodyPos_, initFootPos_;
 		raisim::Vec<4> quat_;
 		raisim::Mat<3,3> rot_;
 		size_t foot_center_, footIndex_, foot_sx_ ,foot_dx_, contact_;
 		raisim::CoordinateFrame footframe_,frame_dx_foot_,frame_sx_foot_;
-		raisim::Vec<3> vel_, ang_vel_, vel_sx_, vel_dx_, ang_vel_sx_, ang_vel_dx_, footPosition_;
+		raisim::Vec<3> vel_, footPosition_;
 		/// these variables are not in use. They are placed to show you how to create a random number sampler.
 		std::normal_distribution<double> normDist_;
 		RandomNumberGenerator<float> rn_;
 		Actuators motors;
 
 		double slip_term_;
-		double previous_height_, max_height_, clearance_foot_ = 0;
-		bool max_clearence_ = false;
+		double previous_height_, clearance_foot_ = 0;
 		Eigen::Vector3d command_;
 
 		std::chrono::duration<double, std::milli> elapsed_time_; 
 		std::chrono::duration<double, std::milli> swing_time_; 
-		std::chrono::steady_clock::time_point start_, lift_instant_, land_instant_;
+		std::chrono::steady_clock::time_point begin_, end_, lift_instant_, land_instant_;
 		std::map<std::string,int> cF_ = {
 			{"center_foot", 0},
 			{"lateral_feet", 0},
@@ -650,21 +763,32 @@ class ENVIRONMENT : public RaisimGymEnv {
 		int previous_contact;
 		int count_ = 0;
 		double vel_rew_, mean_vel_rew_, swing_time_d;
-		int NumberIteration_, countForCurriculum_;
-		double curr_imitation_, curr_vel_, curr_tolerance_;
-		Eigen::VectorXd keyPoint_; 
+		int countForCurriculum_;
+		double curr_imitation_, curr_vel_;
 		std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> footPositions_;
 		bool gonext_ = false;
 		float swing_penalty_;
-		int offset_, curr_index_; 
-		bool fallen_, fallen_error = false;
+		int curr_index_; 
+		bool fallen_ = false;
 		int actual_step_;
 		double error_m1_ = 0, error_m2_ = 0;
 		const float sigma = 0.23;
 		float sigma_square = sigma*sigma;
 		Eigen::VectorXd nextMotorPositions_;
-
+		const int traj_size = 1818;
 		bool ActuatorConnected_ = false;
+		int curr_fact = 1;
+		float targetHeight_ = 0.11;
+		float error_penalty_ = 0;
+		int posForFootHitGround_ = 0;
+		float curr_fact_slip_ = 1;
+		std::vector<double> realMass_;
+		Eigen::VectorXd currRand_jointPos_;
+		Eigen::VectorXd currRand_jointVel_;
+		float disturbanceFactor_;
+		std::ofstream torques;
+		int fallCount_ = 0;
+		bool disturbanceGone_ = false;
 
 };
 //thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
