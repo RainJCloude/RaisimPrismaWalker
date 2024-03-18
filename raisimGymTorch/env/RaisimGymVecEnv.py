@@ -30,6 +30,8 @@ class RaisimGymVecEnv:
         self.var = np.zeros(self.num_obs, dtype=np.float32)
         self.vector = np.zeros(10)
         self.success = 0
+        self.actualTorques = np.zeros(3, dtype=np.float32)
+        self.motorTorques = np.zeros(3, dtype=np.float32)
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -73,7 +75,6 @@ class RaisimGymVecEnv:
 
     def observe(self, update_statistics=True):
         self.wrapper.observe(self._observation, update_statistics)
-        #print("sono in vec env")
         return self._observation
 
     def reset(self):
@@ -85,6 +86,14 @@ class RaisimGymVecEnv:
 
     def curriculum_callback(self):
         self.wrapper.curriculumUpdate()
+
+    def getMotorTorques(self):
+        self.wrapper.getMotorTorques(self.motorTorques)
+        return self.motorTorques
+
+    def getActualTorques(self):
+         self.wrapper.getActualTorques(self.actualTorques)
+         return self.actualTorques
 
         
     def command_vel(self, v_x, v_y, omega_z):   

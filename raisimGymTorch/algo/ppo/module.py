@@ -14,14 +14,6 @@ class Actor:
         self.distribution.to(device)
         self.device = device
         self.action_mean = None
-
-    def sample_with_to(self, obs):
-        
-        self.jointTraj = self.architecture.architectureTo(obs).cpu().numpy()
-
-        actions_to, log_prob_to = self.distribution.sample(self.jointTraj)
-
-        return actions_to, log_prob_to
     
     def sample(self, obs):
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
@@ -79,8 +71,47 @@ class Critic:
         return self.architecture.input_shape
 
 
+
+class Reshape(nn.Module): #here i define or a complete NN or a set of layer to give to sequences
+    def __init__(self, shape, num_envs):
+        super(Reshape, self).__init__()
+        self.num_envs = num_envs
+        self.shape = shape
+        self.batch = nn.BatchNorm1d(shape)
+
+    def forward(self, obs): #here obs is the output of the layer before this. If i print its shape i get (100, 256) where 256 is the number of output features from the second hidden layer
+        #the obs here is not the input, but the output of the previous layer
+        if(len(obs.shape) == 2):
+            if(obs.shape[0] == 7):
+                zeros = torch.zeros([99, self.shape])
+                x = torch.cat((obs, zeros), 0) #concatenate along channel zero
+                return self.batch(x)
+            else:
+                return self.batch(obs)
+        else:
+            obs = obs.view(-1, obs.shape[-1]) #(800, 100, 256)
+            return self.batch(obs)
+
+class ReturnShape(nn.Module): #here i define or a complete NN or a set of layer to give to sequences
+    def __init__(self, output_size):
+        super().__init__()
+        self.output_size = output_size
+
+    def forward(self, obs): #Forward is called during inference
+        #print(obs.shape)  #the obs here is not the input, but the output of the previous layer
+        if(obs.shape[0] == 150): #forwarding pass
+            return obs
+        elif(obs.shape[0] == 75000): #for the computation of the value loss term
+            obs = obs.view(-1, 150, obs.shape[-1])
+            return obs
+        elif(obs.shape[0] == 18750): #training in whihc split the dataset
+            obs = obs.view(-1, obs.shape[-1])
+            return obs
+ 
+
+
 class MLP(nn.Module):
-    def __init__(self, shape, actionvation_fn, input_size, output_size):
+    def __init__(self, shape, actionvation_fn, input_size, output_size, num_envs):
         super(MLP, self).__init__()
         self.activation_fn = actionvation_fn
 
@@ -88,25 +119,18 @@ class MLP(nn.Module):
         scale = [np.sqrt(2)]
 
         for idx in range(len(shape)-1):
-            modules.append(nn.Linear(shape[idx], shape[idx+1]))
+            modules.append(nn.Linear(shape[idx], shape[idx+1]))  #linear can receive any tensor in input, the important is that its last channel has the correct dimension
+            #modules.append(Reshape(shape[idx+1], num_envs))
             modules.append(self.activation_fn())
             modules.append(nn.Dropout(0.45))#After the activation, unless you use RELU. In that case is influent
             #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
             scale.append(np.sqrt(2))
 
-        modulesTO = [nn.Linear(input_size, shape[0]), self.activation_fn()]
-        for idx in range(len(shape)-1):
-            modulesTO.append(nn.Linear(shape[idx], shape[idx+1]))
-            modulesTO.append(self.activation_fn())
-            #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
-            scale.append(np.sqrt(2))
 
         modules.append(nn.Linear(shape[-1], output_size))
-        modulesTO.append(nn.Linear(shape[-1], 1000))
+        #modules.append(ReturnShape(output_size,  num_envs))
 
         self.architecture = nn.Sequential(*modules)
-        self.architectureTo = nn.Sequential(*modulesTO)
-
         scale.append(np.sqrt(2))
 
         self.init_weights(self.architecture, scale)

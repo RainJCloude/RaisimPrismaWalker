@@ -87,6 +87,13 @@ class VectorizedEnvironment {
       updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
+  void getMotorTorques(Eigen::Ref<EigenVec> &tau){
+    environments_[0]->getMotorTorques(tau);
+	}
+
+  void getActualTorques(Eigen::Ref<EigenVec> &tau){
+    environments_[0]->getActualTorques(tau);
+	}
 
   void step(Eigen::Ref<EigenRowMajorMat> &action,
             Eigen::Ref<EigenVec> &reward,

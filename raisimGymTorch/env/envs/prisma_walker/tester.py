@@ -19,6 +19,8 @@ import datetime
 import argparse
 from datetime import datetime
 from pickle import load
+import matplotlib.pyplot as plt
+
 
 #import matplotlib as mpl
 #simport matplotlib.pyplot as plt
@@ -40,16 +42,24 @@ cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
 
 # create environment from the configuration file
 cfg['environment']['num_envs'] = 1
+max_simulation_duration = cfg['environment']['max_time']
 
 env = VecEnv(prisma_walker.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
 #env = VecEnv(prisma_walker.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)))
 # shortcuts
 ob_dim = env.num_obs
 act_dim = env.num_acts
+control_dt = 0.01
 
-weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker_locomotion/a5/full_1200.pt"
+weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/a/full_1000.pt"
 #weight_path = "/home/claudio/Downloads/materiale_tesi_ANTONIO_ZAMPA_PRISMA_WALKER/Materiale da consegnare/Gym_torch_urdf/raisimGymTorch/raisimGymTorch/data/prisma_walker_locomotion/best_train/y_0_yaw_0_full_0_y_maggiore_di_0_full_40_y_e_yaw_vanno_a_0/full_40.pt"
 
+actualTorque_x = []
+actualTorque_y = []
+actualTorque_z = []
+motorTorque_x = []
+motorTorque_y = []
+motorTorque_z = []
 
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
 weight_dir = weight_path.rsplit('/', 1)[0] + '/'
@@ -66,9 +76,10 @@ else:
     n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
     total_steps = n_steps * 1
     start_step_id = 0
+   
 
     print("Visualizing and evaluating the policy: ", weight_path)
-    loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim, act_dim)
+    loaded_graph = ppo_module.MLP(cfg['architecture']['policy_net'], torch.nn.LeakyReLU, ob_dim, act_dim, cfg['environment']['num_envs'])
     loaded_graph.load_state_dict(torch.load(weight_path)['actor_architecture_state_dict'])
 
     #env.command_vel(*args.velocity) #l'asterisco * serve a transformare [1,1,1] in 1,1,1"""
@@ -77,7 +88,7 @@ else:
     env.turn_on_visualization()
 
     # max_steps = 1000000
-    max_steps = 10000 ## 10 secs
+    max_steps = 50000 ## 10 secs
     current_time=0
     counter = 0
     gc=[]
@@ -93,6 +104,10 @@ else:
         action_ll = loaded_graph.architecture(torch.from_numpy(obs).cpu())
         reward_ll, dones = env.step(action_ll.cpu().detach().numpy())
         reward_ll_sum = reward_ll_sum + reward_ll[0]
+        actualTorque_x.append(env.getActualTorques()[0])
+
+        motorTorque_x.append(env.getMotorTorques()[0])
+ 
         #gc = env.getError_vector()
         current_time = current_time + 0.01
       
@@ -104,4 +119,14 @@ else:
             start_step_id = step + 1
             reward_ll_sum = 0.0
 
+    time = np.arange(0, max_simulation_duration, control_dt, dtype='float32') 
+    plt.figure()
+    plt.plot(time, actualTorque_x, label="torque with PD")
+    plt.plot(time, motorTorque_x, label="torque computed manually")
+    plt.title('Torque varying the control mode')
+    plt.xlabel('time')
+    plt.ylabel('torque')
+    plt.grid()
+    plt.legend()
+    plt.show()
 

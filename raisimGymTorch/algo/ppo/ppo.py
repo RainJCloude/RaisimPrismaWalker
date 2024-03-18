@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from .storage import RolloutStorage
-from pickle import dump
+
 
 class PPO:
     def __init__(self,
@@ -18,9 +18,9 @@ class PPO:
                  clip_param=0.2,
                  gamma=0.998,
                  lam=0.95,
-                 value_loss_coef=0.5, 
+                 value_loss_coef=0.5,
                  entropy_coef=0.0,
-                 learning_rate=5e-4, 
+                 learning_rate=3e-7, #2e-6
                  max_grad_norm=0.5,
                  learning_rate_schedule='adaptive',
                  desired_kl=0.01,
@@ -58,7 +58,7 @@ class PPO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
         # Log
-        self.log_dir = os.path.join(log_dir, "loss")
+        self.log_dir = os.path.join(log_dir, datetime.now().strftime('%b%d_%H-%M-%S'))
         self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
         self.tot_timesteps = 0
         self.tot_time = 0
@@ -72,8 +72,6 @@ class PPO:
         self.actions = None
         self.actions_log_prob = None
         self.actor_obs = None
-
-        self.loss_dict = {}
 
     def act(self, actor_obs):
         self.actor_obs = actor_obs
@@ -90,7 +88,7 @@ class PPO:
 
         # Learning step
         self.storage.compute_returns(last_values.to(self.device), self.critic, self.gamma, self.lam)
-        mean_value_loss, mean_surrogate_loss, loss, infos = self._train_step(log_this_iteration, update)
+        mean_value_loss, mean_surrogate_loss, infos = self._train_step(log_this_iteration)
         self.storage.clear()
 
         if log_this_iteration:
@@ -103,12 +101,10 @@ class PPO:
         self.writer.add_scalar('PPO/surrogate', variables['mean_surrogate_loss'], variables['it'])
         self.writer.add_scalar('PPO/mean_noise_std', mean_std.item(), variables['it'])
         self.writer.add_scalar('PPO/learning_rate', self.learning_rate, variables['it'])
-        self.writer.add_scalar('PPO/loss', variables['loss'], variables['it'])
 
-    def _train_step(self, log_this_iteration, update):
+    def _train_step(self, log_this_iteration):
         mean_value_loss = 0
         mean_surrogate_loss = 0
-        running_loss = 0.0
         for epoch in range(self.num_learning_epochs):
             for actor_obs_batch, critic_obs_batch, actions_batch, old_sigma_batch, old_mu_batch, current_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch \
                     in self.batch_sampler(self.num_mini_batches):
@@ -140,7 +136,7 @@ class PPO:
                 surrogate = -torch.squeeze(advantages_batch) * ratio
                 surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
                                                                                    1.0 + self.clip_param)
-                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean() 
+                surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
 
                 # Value function loss
                 if self.use_clipped_value_loss:
@@ -153,7 +149,6 @@ class PPO:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
 
                 loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-                running_loss += loss.item()
 
                 # Gradient step
                 self.optimizer.zero_grad()
@@ -165,17 +160,9 @@ class PPO:
                     mean_value_loss += value_loss.item()
                     mean_surrogate_loss += surrogate_loss.item()
 
-            loss_values_ephoches = running_loss / self.num_mini_batches #Loss for epoches
-        self.loss_dict[update] = loss_values_ephoches / self.num_learning_epochs #Loss for episodes
-
         if log_this_iteration:
             num_updates = self.num_learning_epochs * self.num_mini_batches
-            mean_value_loss /= num_updates
+            mean_value_loss /= num_updates  #Compute the loss for episode dividing for the loss for batch and epoch
             mean_surrogate_loss /= num_updates
-            loss /= num_updates
 
-        with open(self.log_dir + "/loss.pkl", 'wb') as file:  #wb stands for write binary
-            dump(self.loss_dict, file)
-            file.close()
-
-        return mean_value_loss, mean_surrogate_loss, loss, locals()
+        return mean_value_loss, mean_surrogate_loss, locals()
