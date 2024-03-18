@@ -45,11 +45,14 @@ class RolloutStorage:
         self.critic_obs[self.step] = critic_obs
         self.actor_obs[self.step] = actor_obs
         self.actions[self.step] = actions
+        #print("action: ", torch.any(torch.isnan(torch.from_numpy(self.actions))))
         self.mu[self.step] = mu
         self.sigma[self.step] = sigma
         self.rewards[self.step] = rewards.reshape(-1, 1)
+        #print("reward: ", torch.any(torch.isnan(torch.from_numpy(self.rewards))))  no Nan
         self.dones[self.step] = dones.reshape(-1, 1)
         self.actions_log_prob[self.step] = actions_log_prob.reshape(-1, 1)
+        #print("log prob: ", torch.any(torch.isnan(torch.from_numpy(self.actions_log_prob)))) no Nan
         self.step += 1
 
     def clear(self):

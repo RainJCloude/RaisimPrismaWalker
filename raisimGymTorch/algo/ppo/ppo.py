@@ -19,8 +19,8 @@ class PPO:
                  gamma=0.998,
                  lam=0.95,
                  value_loss_coef=0.5,
-                 entropy_coef=0.0,
-                 learning_rate=3e-7, #2e-6
+                 entropy_coef=0.01,
+                 learning_rate=3e-5, #2e-6
                  max_grad_norm=0.5,
                  learning_rate_schedule='adaptive',
                  desired_kl=0.01,
@@ -108,7 +108,7 @@ class PPO:
         for epoch in range(self.num_learning_epochs):
             for actor_obs_batch, critic_obs_batch, actions_batch, old_sigma_batch, old_mu_batch, current_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch \
                     in self.batch_sampler(self.num_mini_batches):
-
+                
                 actions_log_prob_batch, entropy_batch = self.actor.evaluate(actor_obs_batch, actions_batch)
                 value_batch = self.critic.evaluate(critic_obs_batch)
 

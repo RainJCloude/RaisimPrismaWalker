@@ -9,10 +9,10 @@ environment:
   num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
-  max_time: 5
+  max_time: 4
   action_std: 0.1
-  num_seq: 5
-  num_seq_vel: 5
+  num_seq: 1
+  num_seq_vel: 1
   sea_included: true
   reward:
     torque:

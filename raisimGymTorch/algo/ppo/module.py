@@ -17,6 +17,8 @@ class Actor:
     
     def sample(self, obs):
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
+        #print("obs: ", obs[0,:].numpy())
+        #print("action mean: ", self.action_mean)
 
         actions, log_prob = self.distribution.sample(self.action_mean)
         return actions, log_prob
@@ -158,11 +160,11 @@ class MultivariateGaussianDiagonalCovariance(nn.Module):
     def update(self):
         self.std_np = self.std.detach().cpu().numpy()
 
-    def sample(self, logits):
-        self.fast_sampler.sample(logits, self.std_np, self.samples, self.logprob)
+    def sample(self, logits): #here use the custom function to sample from the distribution. THe sample is given from hte mean plus a random noise * the standard deviatipn
+        self.fast_sampler.sample(logits, self.std_np, self.samples, self.logprob) #logprob return log(pi(s | logits))
         return self.samples.copy(), self.logprob.copy()
 
-    def evaluate(self, logits, outputs):
+    def evaluate(self, logits, outputs): #Here use the Normal class provided by pytorch
         distribution = Normal(logits, self.std.reshape(self.dim))
 
         actions_log_prob = distribution.log_prob(outputs).sum(dim=1)
