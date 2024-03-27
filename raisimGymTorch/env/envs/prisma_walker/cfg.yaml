@@ -4,16 +4,16 @@ record_video: yes
 environment:
   render: True
 # just testing commenting
-  num_envs: 100
+  num_envs: 120
   eval_every_n: 250
   num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
   max_time: 4
   action_std: 0.1
-  num_seq: 1
+  num_seq: 2
   num_seq_vel: 1
-  sea_included: true
+  sea_included: false
   reward:
     torque:
       coeff: -0.00025
@@ -28,7 +28,7 @@ environment:
     dynamixel_joint:
       coeff: 0.3 
     Joint_velocity: 
-      coeff: -0.0001
+      coeff: -0.001
     BodyMovementWithLateralFeet:
       coeff: -0.3
     ground_clearence:
