@@ -8,8 +8,8 @@
 #include <Eigen/Core>
 
 
-std::random_device rd;  //Will be used to obtain a seed for the random number engine
-std::mt19937 gen(rd()); 
+        std::random_device rd;  //Will be used to obtain a seed for the random number engine
+        std::mt19937 gen(rd()); 
 
 
 template<typename Dtype>
@@ -40,7 +40,7 @@ class RandomNumberGenerator {
 
   int intRand(const int &min, const int &max) {
 
-        auto dist= std::uniform_int_distribution<>(0, 1);  //se lo prendeva float e mi dava problemi
+        auto dist= std::uniform_int_distribution<>(min, max);  //se lo prendeva float e mi dava problemi
         return dist(gen);
     
   }

@@ -4,37 +4,41 @@ record_video: yes
 environment:
   render: True
 # just testing commenting
-  num_envs: 1
-  eval_every_n: 150
-  num_threads: 30
+  num_envs: 120
+  eval_every_n: 250
+  num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
-  max_time: 6
+  max_time: 5 
   action_std: 0.1
-  num_seq: 5
-  num_seq_vel: 5
+  num_seq: 2
+  num_seq_vel: 1
+  sea_included: true
   reward:
     torque:
-      coeff: -0.00005
-    lin_vel:
-      coeff: 0.05
+      coeff: -0.00025
     imitation:
-      coeff: 1
-    slipping_piede_interno:
-      coeff: -0.6
-    slipping_external_feet:
-      coeff: -0.6
-    angular_penalty:
-      coeff: -0.5
-    air_foot:
-      coeff: -0.005 ##Initialized at -10 in the reset of Environment.hpp
-    Joint_velocity: 
-      coeff: 0
-    dynamixel_joint:
+      coeff: 0.5
+    slip:
+      coeff: -0.4
+    error_penalty:
       coeff: -1
+    angular_penalty:
+      coeff: -0.3
+    dynamixel_joint:
+      coeff: 0.3 
+    Joint_velocity: 
+      coeff: -0.001
+    BodyMovementWithLateralFeet:
+      coeff: -0.3
+    ground_clearence:
+      coeff: 0.2
+    torque_limit:
+      coeff: 1
+
 architecture:
   policy_net: [256, 128]
-  value_net: [256, 128]
+  value_net: [128, 128]
 
   
 

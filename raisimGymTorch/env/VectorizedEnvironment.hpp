@@ -15,7 +15,6 @@ namespace raisim {
 int THREAD_COUNT;
 
 template<class ChildEnvironment>
-
 class VectorizedEnvironment {
 
  public:
@@ -41,8 +40,6 @@ class VectorizedEnvironment {
     THREAD_COUNT = cfg_["num_threads"].template As<int>();
     omp_set_num_threads(THREAD_COUNT);
     num_envs_ = cfg_["num_envs"].template As<int>();
-    num_seq = cfg_["num_seq"].template As<int>();
-    num_seq_vel = cfg_["num_seq_vel"].template As<int>();
 
     environments_.reserve(num_envs_);
     rewardInformation_.reserve(num_envs_);
@@ -81,7 +78,6 @@ class VectorizedEnvironment {
       env->reset();
   }
 
-
   void observe(Eigen::Ref<EigenRowMajorMat> &ob, bool updateStatistics) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++)
@@ -91,11 +87,20 @@ class VectorizedEnvironment {
       updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
+  void getMotorTorques(Eigen::Ref<EigenVec> &tau){
+    environments_[0]->getMotorTorques(tau);
+	}
+
+  //void getobser 
+
+  void getActualTorques(Eigen::Ref<EigenVec> &tau){
+    environments_[0]->getActualTorques(tau);
+	}
 
   void step(Eigen::Ref<EigenRowMajorMat> &action,
             Eigen::Ref<EigenVec> &reward,
             Eigen::Ref<EigenBoolVec> &done) {
-#pragma omp parallel for schedule(auto)  //Questo pragma fa si che le funzioni nel ciclo for, siano tutti thread diversi che coesistono ed eseguono insieme
+#pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++)
       perAgentStep(i, action, reward, done);
   }
@@ -134,34 +139,6 @@ class VectorizedEnvironment {
       env->setSimulationTimeStep(dt);
   }
 
-                            
-  void command_vel(double v_x, double v_y, double omega_z) {
-    for (auto *env: environments_)
-      env->command_vel(v_x, v_y, omega_z);
-  } 
-
-   
-  
-  double get_LinearVel_x(double vel_x){ 
-    //vel_x = environments_[0]->get_LinearVel_x();
-
-    return vel_x;
-  }
-
-  double get_LinearVel_y(double vel_y){
-    //vel_y = environments_[0]->get_LinearVel_y();
-
-    return vel_y;
-  }
-
-  double get_AngularVel_z(double ang_z){
-    //ang_z = environments_[0]->get_AngularVel_z();
-
-    return ang_z;
-  }
-
- 
-
   void setControlTimeStep(double dt) {
     for (auto *env: environments_)
       env->setControlTimeStep(dt);
@@ -170,14 +147,11 @@ class VectorizedEnvironment {
   int getObDim() { return obDim_; }
   int getActionDim() { return actionDim_; }
   int getNumOfEnvs() { return num_envs_; }
-  int getNumSeq_Pos() { return num_seq;}
-  int getNumSeq_Vel() { return num_seq_vel;}
 
   ////// optional methods //////
   void curriculumUpdate() {
-    for (auto *env: environments_){
+    for (auto *env: environments_)
       env->curriculumUpdate();
-    }
   };
 
   const std::vector<std::map<std::string, float>>& getRewardInfo() { return rewardInformation_; }
@@ -199,21 +173,22 @@ class VectorizedEnvironment {
       obCount_ = totCount;
     }
 
-  #pragma omp parallel for schedule(auto)
+#pragma omp parallel for schedule(auto)
     for(int i=0; i<num_envs_; i++)
       ob.row(i) = (ob.row(i) - obMean_.transpose()).template cwiseQuotient<>((obVar_ + epsilon).cwiseSqrt().transpose());
   }
 
-
   inline void perAgentStep(int agentId,
                            Eigen::Ref<EigenRowMajorMat> &action,
                            Eigen::Ref<EigenVec> &reward,
-                           Eigen::Ref<EigenBoolVec> &done) {  
-    reward[agentId] = environments_[agentId]->step(action.row(agentId));
-    rewardInformation_[agentId] = environments_[agentId]->getRewards().getStdMap();
+                           Eigen::Ref<EigenBoolVec> &done) {
+                                float terminalReward = 0;
 
-    float terminalReward = 0;
     done[agentId] = environments_[agentId]->isTerminalState(terminalReward);
+
+    reward[agentId] = environments_[agentId]->step(action.row(agentId));
+
+    rewardInformation_[agentId] = environments_[agentId]->getRewards().getStdMap();
 
     if (done[agentId]) {
       environments_[agentId]->reset();
@@ -221,12 +196,10 @@ class VectorizedEnvironment {
     }
   }
 
-
   std::vector<ChildEnvironment *> environments_;
   std::vector<std::map<std::string, float>> rewardInformation_;
 
   int num_envs_ = 1;
-  int num_seq, num_seq_vel;
   int obDim_ = 0, actionDim_ = 0;
   bool recordVideo_=false, render_=false;
   std::string resourceDir_;
@@ -240,8 +213,6 @@ class VectorizedEnvironment {
   float obCount_ = 1e-4;
   EigenVec recentMean_, recentVar_, delta_;
   EigenVec epsilon;
-  Eigen::Vector3d command_;
-
 };
 
 
