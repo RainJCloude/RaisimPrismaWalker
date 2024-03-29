@@ -111,18 +111,36 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 
 ~Actuators(){};
 
-void sendCommand(Eigen::VectorXd pTarget3, Eigen::Vector3d motorTorque){
-	
-	/*if(control_strategy == hebi::Command::ControlStrategy::DirectPWM)
-		cmd_.setEffort(motorTorque.head(2));
-	else if(control_strategy == hebi::Command::ControlStrategy::Strategy2)
-		cmd_.setPosition(pTarget3.head(2));*/
 
-	//cmd_.setEffort(motorTorque.head(2));
-	cmd_.setPosition(pTarget3.head(2));
+/*void sinusoidalInputJustForTrying(){
+  period = 0.5f;
+  long timeout_ms = 100;
+  for (float t = 0.0f; t < 10.0f; t += period){
+    for (int module_index = 0; module_index < num_modules; module_index++)    {
+      command[module_index].actuator().position().set(sin(t * 0.5f + module_index * 0.25f));
+    }
+
+    if (group->sendCommandWithAcknowledgement(command, timeout_ms)){
+      std::cout << "Got acknowledgement." << std::endl;
+    }
+    else{
+      std::cout << "Did not receive acknowledgement!" << std::endl;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds((long int) (period * 1000)));
+  }
+}*/
+
+
+void sendCommand(Eigen::VectorXd torqueOrPositionCommand, bool effort){
+
+	if(!effort)
+		cmd_.setPosition(torqueOrPositionCommand.head(2));
+	else 
+		cmd_.setEffort(torqueOrPositionCommand.head(2));
+
 	group_->sendCommand(cmd_);
 	//the size of the byte that you should write is visible in the control table
-	int dxl_comm_result = packetHandler_->write4ByteTxRx(portHandler_, dxl_id, addrGoalPosition, pTarget3[2], &dxl_error_);
+	int dxl_comm_result = packetHandler_->write4ByteTxRx(portHandler_, dxl_id, addrGoalPosition, torqueOrPositionCommand[2], &dxl_error_);
 
 }
 

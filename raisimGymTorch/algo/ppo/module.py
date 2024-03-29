@@ -17,7 +17,7 @@ class Actor:
     
     def sample(self, obs):
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
-        #print("obs: ", obs[0,:].numpy())
+        print("obs: ", obs[0,:])
         #print("action mean: ", self.action_mean)
 
         actions, log_prob = self.distribution.sample(self.action_mean)

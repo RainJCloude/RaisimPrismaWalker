@@ -42,6 +42,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("setObStatistics", &VectorizedEnvironment<ENVIRONMENT>::setObStatistics)
     .def("getActualTorques", &VectorizedEnvironment<ENVIRONMENT>::getActualTorques)
     .def("getMotorTorques", &VectorizedEnvironment<ENVIRONMENT>::getMotorTorques)
+    .def("getpTarget", &VectorizedEnvironment<ENVIRONMENT>::getpTarget)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

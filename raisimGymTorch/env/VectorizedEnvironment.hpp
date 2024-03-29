@@ -91,6 +91,10 @@ class VectorizedEnvironment {
     environments_[0]->getMotorTorques(tau);
 	}
 
+  void getpTarget(Eigen::Ref<EigenVec> &pTarget){
+    environments_[0]->getMotorTorques(pTarget);
+	}
+
   //void getobser 
 
   void getActualTorques(Eigen::Ref<EigenVec> &tau){

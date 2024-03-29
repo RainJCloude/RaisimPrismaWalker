@@ -51,7 +51,7 @@ ob_dim = env.num_obs
 act_dim = env.num_acts
 control_dt = 0.01
 
-weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/noActions_noImuData/full_500.pt"
+weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/privileged/full_500.pt"
 #weight_path = "/home/claudio/Downloads/materiale_tesi_ANTONIO_ZAMPA_PRISMA_WALKER/Materiale da consegnare/Gym_torch_urdf/raisimGymTorch/raisimGymTorch/data/prisma_walker_locomotion/best_train/y_0_yaw_0_full_0_y_maggiore_di_0_full_40_y_e_yaw_vanno_a_0/full_40.pt"
 
 actualTorque_x = []
@@ -60,6 +60,7 @@ actualTorque_z = []
 motorTorque_x = []
 motorTorque_y = []
 motorTorque_z = []
+pTarget = []
 
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
 weight_dir = weight_path.rsplit('/', 1)[0] + '/'
@@ -135,7 +136,8 @@ else:
 
         actualTorque_x.append(env.getActualTorques()[0])
         motorTorque_x.append(env.getMotorTorques()[0])
- 
+        pTarget.append(env.getReferences()[0])
+
         #gc = env.getError_vector()
         current_time = current_time + 0.01
       
@@ -174,6 +176,15 @@ else:
     plt.legend()
     plt.show()
 
+    plt.figure()
+    plt.plot(time, pTarget, label="q_ref")
+    #plt.plot(time, q_3, label="q_3")
+    plt.title('joint reference')
+    plt.xlabel('time')
+    plt.ylabel('rad')
+    plt.grid()
+    plt.legend()
+    plt.show()
 
     plt.figure()
     plt.plot(time, dotq_1, label="dotq_1")
