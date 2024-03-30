@@ -51,7 +51,7 @@ ob_dim = env.num_obs
 act_dim = env.num_acts
 control_dt = 0.01
 
-weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/a/full_500.pt"
+weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/noDropout_2Layer/full_500.pt"
 #weight_path = "/home/claudio/Downloads/materiale_tesi_ANTONIO_ZAMPA_PRISMA_WALKER/Materiale da consegnare/Gym_torch_urdf/raisimGymTorch/raisimGymTorch/data/prisma_walker_locomotion/best_train/y_0_yaw_0_full_0_y_maggiore_di_0_full_40_y_e_yaw_vanno_a_0/full_40.pt"
 
 actualTorque_x = []
@@ -60,6 +60,7 @@ actualTorque_z = []
 motorTorque_x = []
 motorTorque_y = []
 motorTorque_z = []
+ 
 
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
 weight_dir = weight_path.rsplit('/', 1)[0] + '/'
@@ -88,10 +89,25 @@ else:
     env.turn_on_visualization()
 
     # max_steps = 1000000
-    max_steps = 50000 ## 10 secs
+    max_steps = 5000
     current_time=0
     counter = 0
-    gc=[]
+  
+    bodyAngularVel_x = []
+    bodyAngularVel_y = []
+    bodyAngularVel_z = []
+
+    q_1 = []
+    q_2 = []
+
+    dotq_1 = []
+    dotq_2 = []
+    
+    pTarge_x = []
+    pTarge_y = []
+    obs_list = []
+
+    #obs_l = torch.from_numpy(obs)
     for step in range(max_steps):
         if current_time == 0:
             time.sleep(1)
@@ -101,13 +117,26 @@ else:
             time.sleep(3)
 
         obs = env.observe(False)
+        obs_list.append(*obs)
+       
+        #obs_l = torch.cat(obs_l, obs)
+
+        q_1.append(env.getPositions()[0])
+        q_2.append(env.getPositions()[1])
+
+        dotq_1.append(env.getVelocities()[0])
+        dotq_2.append(env.getVelocities()[1])
+
         action_ll = loaded_graph.architecture(torch.from_numpy(obs).cpu())
         reward_ll, dones = env.step(action_ll.cpu().detach().numpy())
         reward_ll_sum = reward_ll_sum + reward_ll[0]
-        actualTorque_x.append(env.getActualTorques()[0])
 
+        actualTorque_x.append(env.getActualTorques()[0])
         motorTorque_x.append(env.getMotorTorques()[0])
- 
+
+        pTarge_x.append(env.getReferences()[0])
+        pTarge_y.append(env.getReferences()[1])
+
         #gc = env.getError_vector()
         current_time = current_time + 0.01
       
@@ -119,7 +148,8 @@ else:
             start_step_id = step + 1
             reward_ll_sum = 0.0
 
-    time = np.arange(0, max_simulation_duration, control_dt, dtype='float32') 
+    time = np.arange(0, max_steps/100, control_dt, dtype='float32') 
+
     plt.figure()
     plt.plot(time, actualTorque_x, label="torque with PD")
     plt.plot(time, motorTorque_x, label="torque computed manually")
@@ -130,3 +160,38 @@ else:
     plt.legend()
     plt.show()
 
+
+    #print(obs_l.shape)
+    print(obs_list[0][:3])
+
+    plt.figure()
+    plt.plot(time, q_1, label="$q_1$")
+    plt.plot(time, pTarge_x, label="$\hat{q}_{1}$")
+    #plt.plot(time, q_3, label="q_3")
+    plt.title('joint positions')
+    plt.xlabel('time')
+    plt.ylabel('rad')
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.plot(time, q_2, label="$q_2$")
+    plt.plot(time, pTarge_y, label="$\hat{q}_{2}$")
+    plt.title('joint reference')
+    plt.xlabel('time')
+    plt.ylabel('rad')
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.plot(time, dotq_1, label="\dot{q}_1")
+    plt.plot(time, dotq_2, label="\dot{q}_2")
+    #plt.plot(time, dotq_3, label="dotq_3")
+    plt.title('joint velocities')
+    plt.xlabel('time')
+    plt.ylabel('rad/s')
+    plt.grid()
+    plt.legend()
+    plt.show()

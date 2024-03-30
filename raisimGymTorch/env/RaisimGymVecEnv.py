@@ -32,6 +32,9 @@ class RaisimGymVecEnv:
         self.success = 0
         self.actualTorques = np.zeros(3, dtype=np.float32)
         self.motorTorques = np.zeros(3, dtype=np.float32)
+        self.q_ref = np.zeros(3, dtype=np.float32)
+        self.q = np.zeros(3, dtype=np.float32)
+        self.dotq = np.zeros(3, dtype=np.float32)
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -95,7 +98,18 @@ class RaisimGymVecEnv:
          self.wrapper.getActualTorques(self.actualTorques)
          return self.actualTorques
 
-        
+    def getReferences(self):
+         self.wrapper.getpTarget(self.q_ref)
+         return self.q_ref
+    
+    def getPositions(self):
+         self.wrapper.getJointPositions(self.q)
+         return self.q
+
+    def getVelocities(self):
+         self.wrapper.getJointVelocities(self.dotq)
+         return self.dotq    
+       
     def command_vel(self, v_x, v_y, omega_z):   
         self.wrapper.command_vel(v_x, v_y, omega_z)
     @property

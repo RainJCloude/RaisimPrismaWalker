@@ -3,17 +3,17 @@ record_video: yes
 
 environment:
   render: True
-# just testing commenting
   num_envs: 120
   eval_every_n: 250
   num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
-  max_time: 4
+  max_time: 5 
   action_std: 0.1
-  num_seq: 2
-  num_seq_vel: 1
+  num_seq: 3
+  num_seq_vel: 2
   sea_included: false
+  use_privileged: true
   reward:
     torque:
       coeff: -0.00025
@@ -29,6 +29,8 @@ environment:
       coeff: 0.3 
     Joint_velocity: 
       coeff: -0.001
+    Joint_accelerations: 
+      coeff: -0.00005
     BodyMovementWithLateralFeet:
       coeff: -0.3
     ground_clearence:

@@ -17,7 +17,7 @@ class Actor:
     
     def sample(self, obs):
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
-        #print("obs: ", obs[0,:].numpy())
+        print("obs: ", obs[0,:])
         #print("action mean: ", self.action_mean)
 
         actions, log_prob = self.distribution.sample(self.action_mean)
@@ -124,7 +124,7 @@ class MLP(nn.Module):
             modules.append(nn.Linear(shape[idx], shape[idx+1]))  #linear can receive any tensor in input, the important is that its last channel has the correct dimension
             #modules.append(Reshape(shape[idx+1], num_envs))
             modules.append(self.activation_fn())
-            modules.append(nn.Dropout(0.35))#After the activation, unless you use RELU. In that case is influent
+            #smodules.append(nn.Dropout(0.4))#After the activation, unless you use RELU. In that case is influent
             #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
             scale.append(np.sqrt(2))
 
@@ -160,11 +160,11 @@ class MultivariateGaussianDiagonalCovariance(nn.Module):
     def update(self):
         self.std_np = self.std.detach().cpu().numpy()
 
-    def sample(self, logits): #here use the custom function to sample from the distribution. THe sample is given from hte mean plus a random noise * the standard deviatipn
+    def sample(self, logits): #for the step forward of the NN uses the custom function to sample from the distribution. The sample is given from the mean plus a random noise * the standard deviation
         self.fast_sampler.sample(logits, self.std_np, self.samples, self.logprob) #logprob return log(pi(s | logits))
         return self.samples.copy(), self.logprob.copy()
 
-    def evaluate(self, logits, outputs): #Here use the Normal class provided by pytorch
+    def evaluate(self, logits, outputs): #For the backpropagation uses the Normal class provided by pytorch
         distribution = Normal(logits, self.std.reshape(self.dim))
 
         actions_log_prob = distribution.log_prob(outputs).sum(dim=1)

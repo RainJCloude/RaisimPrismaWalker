@@ -91,6 +91,20 @@ class VectorizedEnvironment {
     environments_[0]->getMotorTorques(tau);
 	}
 
+  void getpTarget(Eigen::Ref<EigenVec> &pTarget){
+    environments_[0]->getReference(pTarget);
+	}
+
+  void getJointPositions(Eigen::Ref<EigenVec> &q){
+    environments_[0]->getJointPositions(q);
+	}
+
+  void getJointVelocities(Eigen::Ref<EigenVec> & dotq){
+    environments_[0]->getJointVelocities(dotq);
+	}
+
+  //void getobser 
+
   void getActualTorques(Eigen::Ref<EigenVec> &tau){
     environments_[0]->getActualTorques(tau);
 	}
