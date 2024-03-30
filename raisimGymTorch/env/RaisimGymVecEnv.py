@@ -112,6 +112,7 @@ class RaisimGymVecEnv:
        
     def command_vel(self, v_x, v_y, omega_z):   
         self.wrapper.command_vel(v_x, v_y, omega_z)
+        
     @property
     def num_envs(self):
         return self.wrapper.getNumOfEnvs()

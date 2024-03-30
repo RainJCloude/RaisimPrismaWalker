@@ -2,12 +2,14 @@
 // This file is part of RaiSim//
 // Copyright 2020, RaiSim Tech//
 //----------------------------//
+#include "RaisimGymEnv.hpp"
+#include "VectorizedEnvironment.hpp"
+
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/eigen.h>
 #include "Environment.hpp"
-#include "VectorizedEnvironment.hpp"
 
 namespace py = pybind11;
 using namespace raisim;
@@ -62,8 +64,26 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
         }
     ));
 
+
   py::class_<NormalSampler>(m, "NormalSampler")
     .def(py::init<int>(), py::arg("dim"))
     .def("seed", &NormalSampler::seed)
     .def("sample", &NormalSampler::sample);
+
 }
+
+
+
+PYBIND11_MODULE(PlotGymVariables, m) {
+    m.doc() = "pybind11 module to plot variables"; // optional module docstring
+    py::class_<GenCoordFetcher<VariablesPlot>>(m, "plotter")
+    .def("getActualTorques", &GenCoordFetcher<VariablesPlot>::getActualTorques)
+    .def("getMotorTorques", &GenCoordFetcher<VariablesPlot>::getMotorTorques)
+    .def("getpTarget", &GenCoordFetcher<VariablesPlot>::getpTarget)
+    .def("getJointPositions", &GenCoordFetcher<VariablesPlot>::getJointPositions)
+    .def("getJointVelocities", &GenCoordFetcher<VariablesPlot>::getJointVelocities);
+}
+
+
+
+

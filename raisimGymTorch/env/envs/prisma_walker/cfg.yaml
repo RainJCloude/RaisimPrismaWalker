@@ -14,6 +14,7 @@ environment:
   num_seq_vel: 2
   sea_included: false
   use_privileged: true
+  implicitIntegration: true
   reward:
     torque:
       coeff: -0.00025
@@ -39,8 +40,8 @@ environment:
       coeff: 1
 
 architecture:
-  policy_net: [256, 128]
-  value_net: [128, 128]
+  policy_net: [512, 256, 128]
+  value_net: [512, 256, 128]
 
   
 

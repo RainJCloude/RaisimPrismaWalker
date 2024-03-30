@@ -9,6 +9,7 @@
 #include "RaisimGymEnv.hpp"
 #include "omp.h"
 #include "Yaml.hpp"
+#include "Environment.hpp"
 
 namespace raisim {
 
@@ -102,8 +103,6 @@ class VectorizedEnvironment {
   void getJointVelocities(Eigen::Ref<EigenVec> & dotq){
     environments_[0]->getJointVelocities(dotq);
 	}
-
-  //void getobser 
 
   void getActualTorques(Eigen::Ref<EigenVec> &tau){
     environments_[0]->getActualTorques(tau);
@@ -208,7 +207,7 @@ class VectorizedEnvironment {
     }
   }
 
-  std::vector<ChildEnvironment *> environments_;
+  
   std::vector<std::map<std::string, float>> rewardInformation_;
 
   int num_envs_ = 1;
@@ -225,6 +224,9 @@ class VectorizedEnvironment {
   float obCount_ = 1e-4;
   EigenVec recentMean_, recentVar_, delta_;
   EigenVec epsilon;
+
+  protected:
+    std::vector<ChildEnvironment *> environments_;
 };
 
 
@@ -277,6 +279,71 @@ class NormalSampler {
   int dim_;
   std::vector<NormalDistribution> normal_;
 };
+ 
+
+template <class ChildEnvironment>
+struct GenCoordFetcher: public raisim::VectorizedEnvironment <ChildEnvironment>{
+
+
+  /*GenCoordFetcher(ChildEnvironment* env)
+  : raisim::VectorizedEnvironment<ChildEnvironment>::environments_(env){ //ChildEnvironment* env = environments_[0]
+    //cannot do this operation because world is a unique pointer. 
+  }*/
+
+    void getMotorTorques(Eigen::Ref<EigenVec> &tau){
+       raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getMotorTorques(tau);
+    }
+
+    void getpTarget(Eigen::Ref<EigenVec> &pTarget){
+         raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getReference(pTarget);
+    }
+
+    void getJointPositions(Eigen::Ref<EigenVec> &q){
+         raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getJointPositions(q);
+    }
+
+    void getJointVelocities(Eigen::Ref<EigenVec> & dotq){
+         raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getJointVelocities(dotq);
+    }
+
+    void getActualTorques(Eigen::Ref<EigenVec> &tau){
+         raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getActualTorques(tau);
+    }
+    //Just got the access to the protected member. I couldn't copy that element into another because of unique_ptr
+
+    ChildEnvironment* env_;
+
+};
+
+
+
+struct VariablesPlot: public ENVIRONMENT{
+
+
+  void getActualTorques(Eigen::Ref<EigenVec>& tau){
+		tau = ENVIRONMENT::computedTorques.cast<float>();
+	}
+
+	void getMotorTorques(Eigen::Ref<EigenVec>& tau){
+		tau = ENVIRONMENT::motorTorque.cast<float>();
+	}
+
+	void getReference(Eigen::Ref<EigenVec>& tau){
+		tau = ENVIRONMENT::pTarget_.tail(3).cast<float>();
+	}
+
+	void getJointPositions(Eigen::Ref<EigenVec>& q){
+		q = ENVIRONMENT::gc_.tail(3).cast<float>();
+	}
+	
+	void getJointVelocities(Eigen::Ref<EigenVec>& dotq){
+		dotq = ENVIRONMENT::gv_.tail(3).cast<float>();
+	}
+
+};
+
+
+
 
 }
 

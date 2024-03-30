@@ -55,6 +55,7 @@ class RaisimGymEnv {
   void stopRecordingVideo() { server_->stopRecordingVideo(); }
   raisim::Reward& getRewards() { return rewards_; }
 
+
  protected:
   std::unique_ptr<raisim::World> world_;
   double simulation_dt_ = 0.001;
