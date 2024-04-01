@@ -47,6 +47,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("getpTarget", &VectorizedEnvironment<ENVIRONMENT>::getpTarget)
     .def("getJointPositions", &VectorizedEnvironment<ENVIRONMENT>::getJointPositions)
     .def("getJointVelocities", &VectorizedEnvironment<ENVIRONMENT>::getJointVelocities)
+    .def("getJointAccelerations", &VectorizedEnvironment<ENVIRONMENT>::getJointAccelerations)
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */

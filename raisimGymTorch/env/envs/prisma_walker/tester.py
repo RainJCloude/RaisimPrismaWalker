@@ -1,26 +1,17 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
-from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
 from raisimGymTorch.env.bin import prisma_walker
-from raisimGymTorch.env.bin.prisma_walker import NormalSampler
-from raisimGymTorch.env.bin.prisma_walker import RaisimGymEnv
 import os
 import math
 import time
 import raisimGymTorch.algo.ppo.module as ppo_module
 import raisimGymTorch.algo.ppo.ppo as PPO
 import torch.nn as nn
-from torch.utils.tensorboard import SummaryWriter
-from tensorboard import program
-import webbrowser
 import numpy as np
 import torch
-import datetime
 import argparse
-from datetime import datetime
 from pickle import load
 import matplotlib.pyplot as plt
-
 
 #import matplotlib as mpl
 #simport matplotlib.pyplot as plt
@@ -45,13 +36,13 @@ cfg['environment']['num_envs'] = 1
 max_simulation_duration = cfg['environment']['max_time']
 
 env = VecEnv(prisma_walker.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
-#env = VecEnv(prisma_walker.RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)))
+
 # shortcuts
 ob_dim = env.num_obs
 act_dim = env.num_acts
 control_dt = 0.01
 
-weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/a1/full_500.pt"
+weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/acc_dropout_MotorTorque2/full_1000.pt"
 #weight_path = "/home/claudio/Downloads/materiale_tesi_ANTONIO_ZAMPA_PRISMA_WALKER/Materiale da consegnare/Gym_torch_urdf/raisimGymTorch/raisimGymTorch/data/prisma_walker_locomotion/best_train/y_0_yaw_0_full_0_y_maggiore_di_0_full_40_y_e_yaw_vanno_a_0/full_40.pt"
 
 actualTorque_x = []
@@ -60,6 +51,7 @@ actualTorque_z = []
 motorTorque_x = []
 motorTorque_y = []
 motorTorque_z = []
+
  
 
 iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
@@ -102,6 +94,12 @@ else:
 
     dotq_1 = []
     dotq_2 = []
+
+    ddotq_1 = []
+    ddotq_2 = []
+
+    ddotq_1 = []
+    ddotq_2 = []
     
     pTarge_x = []
     pTarge_y = []
@@ -126,6 +124,9 @@ else:
 
         dotq_1.append(env.getVelocities()[0])
         dotq_2.append(env.getVelocities()[1])
+
+        ddotq_1.append(env.getAccelerations()[0])
+        ddotq_2.append(env.getAccelerations()[1])
 
         action_ll = loaded_graph.architecture(torch.from_numpy(obs).cpu())
         reward_ll, dones = env.step(action_ll.cpu().detach().numpy())
@@ -192,6 +193,18 @@ else:
     plt.title('joint velocities')
     plt.xlabel('time')
     plt.ylabel('rad/s')
+    plt.grid()
+    plt.legend()
+    plt.show()
+
+
+    plt.figure()
+    plt.plot(time, ddotq_1, label="\ddot{q}_1")
+    plt.plot(time, ddotq_2, label="\ddot{q}_2")
+    #plt.plot(time, dotq_3, label="dotq_3")
+    plt.title('joint accelerations')
+    plt.xlabel('time')
+    plt.ylabel('rad/$s^2$')
     plt.grid()
     plt.legend()
     plt.show()

@@ -20,8 +20,6 @@
 
 #include "../../RaisimGymEnv.hpp"
 #include "raisim/contact/Contact.hpp"
-//#include "rewards/rewards.hpp"
-
 
 #include "Actuators.hpp"
 
@@ -61,6 +59,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		/// initialize containers
 		gc_.setZero(gcDim_); gc_init_.setZero(gcDim_); gc_noise_.setZero(gcDim_);
 		gv_.setZero(gvDim_); gv_init_.setZero(gvDim_); gv_noise_.setZero(gvDim_);
+		ga_.setZero(nJoints_);
 		pTarget_.setZero(gcDim_); vTarget_.setZero(gvDim_); pTarget3_.setZero(nJoints_);  
 		linkTorque_.setZero(gvDim_);
 
@@ -124,11 +123,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		/// Reward coefficients
 		rewards_.initializeFromConfigurationFile (cfg["reward"]);
 
-		footIndex_ = prisma_walker->getBodyIdx("link_3");
-		
 		foot_center_ = prisma_walker->getFrameIdxByLinkName("piede_interno"); //since there is a fixed joint, I cant assign a body idx to it
-		foot_sx_ = prisma_walker->getFrameIdxByLinkName("piede_sx");
-		foot_dx_ = prisma_walker->getFrameIdxByLinkName("piede_dx");
+ 
 
 		m1_pos_.setZero(traj_size);
 		m2_pos_.setZero(traj_size); 
@@ -239,6 +235,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 		dotq = gv_.tail(3).cast<float>();
 	}
 
+	void getJointAccelerations(Eigen::Ref<EigenVec>& ddotq){
+		ddotq = ga_.cast<float>();
+	}
+
 	void reset() final {
 		motorSpring_ = 20 + rn_.sampleUniform01()*180; //min and max of the spring coefficient
 
@@ -279,18 +279,19 @@ class ENVIRONMENT : public RaisimGymEnv {
 		current_action_ = pTarget3_;
 	
 		if(!sea_included_){
-			//prisma_walker->setPdTarget(pTarget_, vTarget_);
 
-			motorTorque = 80*(pTarget3_ - gc_.tail(3)) - 0.8*gv_.tail(3);
+			motorTorque = 20*(pTarget3_ - gc_.tail(3)) - 0.2*gv_.tail(3);
+
 			for(int i = 0; i< motorTorque.size(); i++){
 				motorTorque(i) = std::clamp(motorTorque[i], -gearRatio*7, gearRatio*7);
 			}
+
 			linkTorque_.tail(3) = motorTorque;
 			computedTorques = prisma_walker->getGeneralizedForce().e().tail(3);
 
 		}
 		else{
-			motorTorque = 80*(pTarget3_ - theta) - 0.9*dotTheta;
+			motorTorque = 20*(pTarget3_ - theta) - 0.2*dotTheta;
 
 			/*for(int i = 0; i< motorTorque.size(); i++){
 				motorTorque(i) = std::clamp(motorTorque[i], -gearRatio*7, gearRatio*7);
@@ -311,9 +312,9 @@ class ENVIRONMENT : public RaisimGymEnv {
 			linkTorque_.tail(3) << motorSpring_*(theta - gc_.tail(3));
 		}
 
-		
+		/*
 		pTarget_.tail(nJoints_) << std::sin(2*M_PI*5000*t), std::sin(2*M_PI*5000*t + 0.25), 0;
-		t+=control_dt_;
+		t+=control_dt_;*/
 
 		if(implicitIntegration)
 			prisma_walker->setPdTarget(pTarget_, vTarget_);
@@ -337,12 +338,15 @@ class ENVIRONMENT : public RaisimGymEnv {
 		imitation_function();
 		external_force();
 
+
+		ga_ = (joint_history_vel_.segment(3,3) - joint_history_vel_.segment(0,3))/control_dt_;
+		rewards_.record("Joint_accelerations", ga_.squaredNorm());
 		rewards_.record("torque", prisma_walker->getGeneralizedForce().squaredNorm());
 		rewards_.record("error_penalty", error_penalty_);
 		rewards_.record("imitation", std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_)));
 		//rewards_.record("dynamixel_joint", std::exp(-2*(1/sigma)*gc_[9]*gc_[9]));
 		rewards_.record("angular_penalty", bodyAngularVel_[0] + bodyAngularVel_[1]); //+0.025*bodyLinearVel_[2]
-		rewards_.record("slip", curr_fact_slip_*slip_term_);
+		rewards_.record("slip", slip_term_);
 		rewards_.record("ground_clearence", clearance_foot_);
 
 		rewards_.record("Joint_velocity", curr_fact* gv_.segment(6,2).squaredNorm());
@@ -357,7 +361,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			gc_init_[8] = gc_[8];
 		}
 
-		std::cout<<slip_term_<<std::endl;
+	    std::cout<<vel_[0]<<std::endl;
 
 		return rewards_.sum();
 		
@@ -406,7 +410,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			}
 		} 
 
-		if(cF_["center_foot"]==1){
+		if(cF_["center_foot"]==1 ){
 			previous_height_ = 0;
 		}
 
@@ -420,7 +424,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			slip_term_ = std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
 		}	
 
-		if(cF_["center_foot"] == 1 && cF_["lateral_feet"] == 1 && index_imitation_ > 800 && index_imitation_ < 1600){
+		if(cF_["center_foot"] == 1 && bodyFootPos_[0] <= 0){
 			if(slip_term_ > 0)
 				posForFootHitGround_ -= 0.01;
 				curr_fact_slip_ += 0.01;
@@ -767,38 +771,27 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		private:
 		std::string home_path_;
-		int gcDim_, gvDim_, nJoints_,timing_,fbk_counter_,n_campione_vel_,n_campione_pos_, index_imitation_;
+		int gcDim_, gvDim_, nJoints_;
 		float alfa_z_, roll_init_, pitch_init_, yaw_init_; // initial orientation of prisma prisma walker
 		Eigen::VectorXd m1_pos_;
 		Eigen::VectorXd m2_pos_;
  
-		double smoothing_factor_ = 0.06;
 		raisim::Mat<3,3> rot_randomized_;
-		raisim::Vec<4> quaternion_;
  
 		Eigen::VectorXd filtered_acc_ = Eigen::VectorXd::Zero(3);
  
  		Eigen::Quaternionf q_;
-		double mean_value_x_ = 0.0;double mean_value_y_ = 0.0;double mean_value_z_ = 0.0;
-		Eigen::VectorXd real_lin_acc_ = Eigen::VectorXd::Zero(3);
 
-		Eigen::Matrix3d R_imu_base_frame_ = Eigen::Matrix3d::Zero(3,3);
-		Eigen::Matrix3d real_orientation_matrix_ = Eigen::Matrix3d::Zero(3,3);
-		Eigen::Vector3d rpy_;
 		bool visualizable_ = false;
 		raisim::ArticulatedSystem* prisma_walker;
 		Eigen::VectorXd gc_init_, gv_init_, gc_noise_, gv_noise_, pTarget3_, vTarget_;
 		const int terminalRewardCoeff_ = -12.;
 		Eigen::VectorXd actionMean_, actionStd_, obDouble_;
-		Eigen::Vector3d bodyLinearVel_, bodyAngularVel_, bodyAngularVel_real_, bodyFootPos_, bodyPos_, initBodyPos_, initFootPos_;
-		std::ofstream v_lin_sim_ = std::ofstream("v_lin_sim_40.txt");
-		std::ofstream p_sim_ = std::ofstream("p_sim_40.txt");
-		std::ofstream ori_sim_ = std::ofstream("ori_sim_40.txt");
-		std::ofstream v_ang_sim_ = std::ofstream("v_ang_sim_40.txt");
+		Eigen::Vector3d bodyLinearVel_, bodyAngularVel_, bodyAngularVel_real_, bodyFootPos_, bodyPos_;
+ 
 		raisim::Vec<4> quat_;
 		raisim::Mat<3,3> rot_;
-		size_t foot_center_, footIndex_, foot_sx_ ,foot_dx_, contact_;
-		raisim::CoordinateFrame footframe_,frame_dx_foot_,frame_sx_foot_;
+		size_t foot_center_;
 		raisim::Vec<3> vel_, footPosition_;
 		/// these variables are not in use. They are placed to show you how to create a random number sampler.
 		std::normal_distribution<double> normDist_;
@@ -811,9 +804,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		bool max_clearence_ = false;
 		Eigen::Vector3d command_;
 
-		std::chrono::duration<double, std::milli> elapsed_time_; 
 		std::chrono::duration<double, std::milli> swing_time_; 
-		std::chrono::steady_clock::time_point begin_, end_, lift_instant_, land_instant_;
+		std::chrono::steady_clock::time_point lift_instant_, land_instant_;
 		std::map<std::string,int> cF_ = {
 			{"center_foot", 0},
 			{"lateral_feet", 0},
@@ -864,9 +856,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 		float t = 0.0;
 
 	protected:
-		Eigen::VectorXd gc_, gv_, pTarget_;
+		Eigen::VectorXd gc_, gv_, ga_, pTarget_;
 		Eigen::Vector3d computedTorques;
-		Eigen::Vector3d theta, dotTheta, motorTorque;;
+		Eigen::Vector3d theta, dotTheta, motorTorque;
+		int index_imitation_;
 
 
 

@@ -127,7 +127,7 @@ for update in range(1000000):
     # actual training
     for step in range(n_steps):
         obs = env.observe()
-        print(obs[0,:])
+        #print(obs[0,:])
         action = ppo.act(obs)
         reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)

@@ -108,6 +108,10 @@ class VectorizedEnvironment {
     environments_[0]->getActualTorques(tau);
 	}
 
+  void getJointAccelerations(Eigen::Ref<EigenVec> &acc){
+        raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getJointAccelerations(acc);
+  }
+  
   void step(Eigen::Ref<EigenRowMajorMat> &action,
             Eigen::Ref<EigenVec> &reward,
             Eigen::Ref<EigenBoolVec> &done) {
@@ -227,6 +231,7 @@ class VectorizedEnvironment {
 
   protected:
     std::vector<ChildEnvironment *> environments_;
+
 };
 
 
@@ -284,7 +289,6 @@ class NormalSampler {
 template <class ChildEnvironment>
 struct GenCoordFetcher: public raisim::VectorizedEnvironment <ChildEnvironment>{
 
-
   /*GenCoordFetcher(ChildEnvironment* env)
   : raisim::VectorizedEnvironment<ChildEnvironment>::environments_(env){ //ChildEnvironment* env = environments_[0]
     //cannot do this operation because world is a unique pointer. 
@@ -309,6 +313,12 @@ struct GenCoordFetcher: public raisim::VectorizedEnvironment <ChildEnvironment>{
     void getActualTorques(Eigen::Ref<EigenVec> &tau){
          raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getActualTorques(tau);
     }
+
+    void getJointAccelerations(Eigen::Ref<EigenVec> &acc){
+         raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getJointAccelerations(acc);
+    }
+
+
     //Just got the access to the protected member. I couldn't copy that element into another because of unique_ptr
 
     ChildEnvironment* env_;
@@ -317,7 +327,7 @@ struct GenCoordFetcher: public raisim::VectorizedEnvironment <ChildEnvironment>{
 
 
 
-struct VariablesPlot: public ENVIRONMENT{
+struct VariablesPlot: private raisim::ENVIRONMENT{
 
 
   void getActualTorques(Eigen::Ref<EigenVec>& tau){
@@ -338,6 +348,10 @@ struct VariablesPlot: public ENVIRONMENT{
 	
 	void getJointVelocities(Eigen::Ref<EigenVec>& dotq){
 		dotq = ENVIRONMENT::gv_.tail(3).cast<float>();
+	}
+
+	void getJointAccelerations(Eigen::Ref<EigenVec>& ddotq){
+		ddotq = ga_.cast<float>();
 	}
 
 };

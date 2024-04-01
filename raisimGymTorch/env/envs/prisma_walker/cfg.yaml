@@ -14,7 +14,7 @@ environment:
   num_seq_vel: 2
   sea_included: false
   use_privileged: true
-  implicitIntegration: true
+  implicitIntegration: false
   reward:
     torque:
       coeff: -0.00025
@@ -31,9 +31,9 @@ environment:
     Joint_velocity: 
       coeff: -0.001
     Joint_accelerations: 
-      coeff: -0.00005
+      coeff: -9e-6
     BodyMovementWithLateralFeet:
-      coeff: -0.3
+      coeff: -0.45
     ground_clearence:
       coeff: 0.2
     torque_limit:

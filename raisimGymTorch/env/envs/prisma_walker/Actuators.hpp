@@ -34,7 +34,6 @@ class Actuators {
  public:
 
 Actuators(){
-
 };
 
 void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bool visualizable_)
