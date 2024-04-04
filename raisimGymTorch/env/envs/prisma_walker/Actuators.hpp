@@ -34,7 +34,6 @@ class Actuators {
  public:
 
 Actuators(){
-
 };
 
 void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bool visualizable_)
@@ -42,7 +41,6 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 	portHandler_ = dynamixel::PortHandler::getPortHandler(deviceName);
 	packetHandler_ = dynamixel::PacketHandler::getPacketHandler(protocolVersion);
 	group_ = lookup_.getGroupFromNames({"X5-4"}, {"X-01059", "X-01077"} );
-
 	/*if(controlStrategyInt == 1)
 		control_strategy = hebi::Command::ControlStrategy::DirectPWM;
 	else if(controlStrategyInt == 2)
@@ -60,7 +58,7 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 	}
 	else{
 		num_modules_ = group_->size();
-		std::cout<<num_modules_<<std::endl;
+		std::cout<<"numero moduli: "<<num_modules_<<std::endl;
 
 		/*if(control_strategy == hebi::Command::ControlStrategy::Strategy2){
 			for (int module_index = 0; module_index < num_modules_; module_index++){
@@ -100,8 +98,6 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 		//inputs for the RL policy: there is misalignment between the
 		//proprioceptive state and the visual observation in the real
 		//robot
-		num_pos_ = num_pos;
-		num_vel_ = num_vel;
 		joint_history_pos_.setZero(num_pos*3);
 		joint_history_vel_.setZero(num_vel*3);
 		
@@ -155,39 +151,77 @@ void swapMatrixRows(Eigen::Matrix3d &mat){
 	mat.row(1) = temp;
 }
 
-Eigen::VectorXd getFeedback(){
-
+void getMotorPos(const hebi::GroupFeedback& feedback,  Eigen::Vector3d & motor_pos){
 	double dxl_pos;
-	double dxl_vel;
-
-	//Da segmentation fault se i motori non sono connessi e la chiami lo stesso
-	group_->sendFeedbackRequest(); // Sends a request to the modules for feedback and immediately returns
-
-	group_->getNextFeedback(Gfeedback_);
-
-	const double m1_pos_fbk = Gfeedback_[0].actuator().position().get();
-	const double m2_pos_fbk = Gfeedback_[1].actuator().position().get();
+	const double m1_pos_fbk = feedback[0].actuator().position().get();
+	const double m2_pos_fbk = feedback[1].actuator().position().get();
 	packetHandler_->read4ByteTxRx(portHandler_, dxl_id, addrPresentPosition, (uint32_t*)&dxl_pos, &dxl_error_);
-	Eigen::Vector3d motor_pos;
+	
 	motor_pos << m1_pos_fbk, m2_pos_fbk, dxl_pos;
+}
 
+void getMotorVel(const hebi::GroupFeedback& feedback, Eigen::Vector3d & motor_vel){
+	double dxl_vel;
+	const double m1_vel_fbk = feedback[0].actuator().velocity().get();
+	const double m2_vel_fbk = feedback[1].actuator().velocity().get();
+	packetHandler_->read4ByteTxRx(portHandler_, dxl_id, addrPresentVelocity, (uint32_t*)&dxl_vel, &dxl_error_);
+
+	motor_vel << m1_vel_fbk, m2_vel_fbk, dxl_vel;
+}
+
+
+Eigen::VectorXd dataPlotMotorVariables(){
+	group_->sendFeedbackRequest();
+	group_->getNextFeedback(Gfeedback_);
+	
+	double dxl_vel;
 	const double m1_vel_fbk = Gfeedback_[0].actuator().velocity().get();
 	const double m2_vel_fbk = Gfeedback_[1].actuator().velocity().get();
 	packetHandler_->read4ByteTxRx(portHandler_, dxl_id, addrPresentVelocity, (uint32_t*)&dxl_vel, &dxl_error_);
-	Eigen::Vector3d motor_vel;
-	motor_vel << m1_vel_fbk, m2_vel_fbk, dxl_vel;
 
-	updateJointHistory(motor_pos, motor_vel);
 
-	//Eigen::Matrix<double, 2, 3> gyros = Gfeedback_.getGyro();
+	double dxl_pos; 
+	const double m1_pos_fbk = Gfeedback_[0].actuator().position().get();
+	const double m2_pos_fbk = Gfeedback_[1].actuator().position().get();
+	packetHandler_->read4ByteTxRx(portHandler_, dxl_id, addrPresentPosition, (uint32_t*)&dxl_pos, &dxl_error_);
+
+	Eigen::VectorXd motorVariables;
+	motorVariables.setZero(6); //seg fault if you forget it
+	motorVariables << m1_pos_fbk, m2_pos_fbk, dxl_pos, m1_vel_fbk, m2_vel_fbk, dxl_vel;
+
+	return motorVariables;
+}
+
+Eigen::VectorXd getFeedback(const double m1Pos, const double m2Pos){
+
+	group_->sendFeedbackRequest();
+	group_->getNextFeedback(Gfeedback_);
+	
+	double dxl_vel;
+	const double m1_vel_fbk = Gfeedback_[0].actuator().velocity().get();
+	const double m2_vel_fbk = Gfeedback_[1].actuator().velocity().get();
+	packetHandler_->read4ByteTxRx(portHandler_, dxl_id, addrPresentVelocity, (uint32_t*)&dxl_vel, &dxl_error_);
+
+	double dxl_pos; 
+	const double m1_pos_fbk = Gfeedback_[0].actuator().position().get();
+	const double m2_pos_fbk = Gfeedback_[1].actuator().position().get();
+	packetHandler_->read4ByteTxRx(portHandler_, dxl_id, addrPresentPosition, (uint32_t*)&dxl_pos, &dxl_error_);
+
+	Eigen::VectorXd motorVariables;
+	motorVariables.setZero(6); //seg fault if you forget it
+	motorVariables << m1_pos_fbk, m2_pos_fbk, dxl_pos, m1_vel_fbk, m2_vel_fbk, dxl_vel;
+	
+	updateJointHistory(motorVariables.segment(0,3), motorVariables.segment(3,3));
+
+	//Orientation and body velocity got from the first joint
 	const auto real_orientation_ = Gfeedback_[0].imu().orientation().get();
 	const auto imu_ang_vel = Gfeedback_[0].imu().gyro().get();
-	const auto imu_lin_vel = Gfeedback_[1].imu().gyro().get();
 
 	quat_[0] = real_orientation_.getW();
 	quat_[1] = real_orientation_.getX();
 	quat_[2] = real_orientation_.getY();
 	quat_[3] = real_orientation_.getZ();
+
 	raisim::quatToRotMat(quat_, rot_);
 	Eigen::Matrix3d m = rot_.e();
 	swapMatrixRows(m);
@@ -201,18 +235,18 @@ Eigen::VectorXd getFeedback(){
 	//bodyLinearVel_ = m.transpose()*imu_lin_vel;
 
 	Eigen::VectorXd observations;
+	double error1 = m1_pos_fbk - m1Pos;
+	double error2 = m2_pos_fbk - m2Pos;
 	//initialize always the 
-	/*observations.setZero(9 + joint_history_pos_.size() + joint_history_vel_.size());
+	observations.setZero(9 + 2 + joint_history_pos_.size() + joint_history_vel_.size());
 	observations << m.row(1).transpose(),
 			m.row(2).transpose(),
 			bodyAngularVel_,
-			joint_history_pos_, 
-			joint_history_vel_;*/
-	
-	observations.setZero(3 + joint_history_pos_.size() + joint_history_vel_.size());
-	observations << bodyAngularVel_,
+			error1,
+			error2,
 			joint_history_pos_, 
 			joint_history_vel_;
+	
 
 	return observations;
 }     
@@ -220,7 +254,7 @@ Eigen::VectorXd getFeedback(){
 void updateJointHistory(Eigen::Vector3d motor_pos, Eigen::Vector3d motor_vel){
 	
 	joint_history_pos_.head(joint_history_pos_.size() - 3) = joint_history_pos_.tail(joint_history_pos_.size() - 3);
-	joint_history_vel_.head(joint_history_pos_.size() - 3) = joint_history_vel_.tail(joint_history_pos_.size() - 3);
+	joint_history_vel_.head(joint_history_vel_.size() - 3) = joint_history_vel_.tail(joint_history_vel_.size() - 3);
 	
 	joint_history_pos_.tail(3) = motor_pos;
 	joint_history_vel_.tail(3) = motor_vel;

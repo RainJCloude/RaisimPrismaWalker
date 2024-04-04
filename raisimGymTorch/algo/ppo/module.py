@@ -17,7 +17,7 @@ class Actor:
     
     def sample(self, obs):
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
-        print("obs: ", obs[0,:])
+        #print("obs: ", obs[0,:])
         #print("action mean: ", self.action_mean)
 
         actions, log_prob = self.distribution.sample(self.action_mean)
@@ -124,7 +124,7 @@ class MLP(nn.Module):
             modules.append(nn.Linear(shape[idx], shape[idx+1]))  #linear can receive any tensor in input, the important is that its last channel has the correct dimension
             #modules.append(Reshape(shape[idx+1], num_envs))
             modules.append(self.activation_fn())
-            #modules.append(nn.Dropout(0.35))#After the activation, unless you use RELU. In that case is influent
+            modules.append(nn.Dropout(0.4))#After the activation, unless you use RELU. In that case is influent
             #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
             scale.append(np.sqrt(2))
 

@@ -10,10 +10,11 @@ environment:
   control_dt: 0.01
   max_time: 5
   action_std: 0.1
-  num_seq: 2
-  num_seq_vel: 1
-  sea_included: true
+  num_seq: 3
+  num_seq_vel: 2
+  sea_included: false
   use_privileged: true
+  implicitIntegration: false
   reward:
     torque:
       coeff: -0.00025
@@ -27,10 +28,14 @@ environment:
       coeff: -0.3
     dynamixel_joint:
       coeff: 0.3 
+    Joint_positions:
+      coeff: 0.5
     Joint_velocity: 
       coeff: -0.001
+    Joint_accelerations: 
+      coeff: -8e-6
     BodyMovementWithLateralFeet:
-      coeff: -0.3
+      coeff: -0.45
     ground_clearence:
       coeff: 0.2
     torque_limit:

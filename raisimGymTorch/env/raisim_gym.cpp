@@ -2,12 +2,14 @@
 // This file is part of RaiSim//
 // Copyright 2020, RaiSim Tech//
 //----------------------------//
+#include "RaisimGymEnv.hpp"
+#include "VectorizedEnvironment.hpp"
+
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/eigen.h>
 #include "Environment.hpp"
-#include "VectorizedEnvironment.hpp"
 
 namespace py = pybind11;
 using namespace raisim;
@@ -43,6 +45,13 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("getActualTorques", &VectorizedEnvironment<ENVIRONMENT>::getActualTorques)
     .def("getMotorTorques", &VectorizedEnvironment<ENVIRONMENT>::getMotorTorques)
     .def("getpTarget", &VectorizedEnvironment<ENVIRONMENT>::getpTarget)
+    .def("getJointPositions", &VectorizedEnvironment<ENVIRONMENT>::getJointPositions)
+    .def("getJointVelocities", &VectorizedEnvironment<ENVIRONMENT>::getJointVelocities)
+    .def("getJointAccelerations", &VectorizedEnvironment<ENVIRONMENT>::getJointAccelerations)
+    .def("getPitch", &VectorizedEnvironment<ENVIRONMENT>::getPitch)
+    .def("getYaw", &VectorizedEnvironment<ENVIRONMENT>::getYaw)
+    .def("getAngularVel", &VectorizedEnvironment<ENVIRONMENT>::getAngularVel)
+    .def("getCurrentAction", &VectorizedEnvironment<ENVIRONMENT>::getCurrentAction)    
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
             /* Return a tuple that fully encodes the state of the object */
@@ -60,8 +69,26 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
         }
     ));
 
+
   py::class_<NormalSampler>(m, "NormalSampler")
     .def(py::init<int>(), py::arg("dim"))
     .def("seed", &NormalSampler::seed)
     .def("sample", &NormalSampler::sample);
+
 }
+
+
+
+PYBIND11_MODULE(PlotGymVariables, m) {
+    m.doc() = "pybind11 module to plot variables"; // optional module docstring
+    py::class_<GenCoordFetcher<VariablesPlot>>(m, "plotter")
+    .def("getActualTorques", &GenCoordFetcher<VariablesPlot>::getActualTorques)
+    .def("getMotorTorques", &GenCoordFetcher<VariablesPlot>::getMotorTorques)
+    .def("getpTarget", &GenCoordFetcher<VariablesPlot>::getpTarget)
+    .def("getJointPositions", &GenCoordFetcher<VariablesPlot>::getJointPositions)
+    .def("getJointVelocities", &GenCoordFetcher<VariablesPlot>::getJointVelocities);
+}
+
+
+
+
