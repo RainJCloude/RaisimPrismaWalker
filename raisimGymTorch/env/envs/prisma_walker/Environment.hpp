@@ -324,6 +324,12 @@ class ENVIRONMENT : public RaisimGymEnv {
 		prisma_walker->setState(gc_init_, gv_init_);
 		updateObservation();
 		computedTorques.setZero();
+
+		if(ActuatorConnected_){
+			Eigen::VectorXd init = motors->dataPlotMotorVariables();
+			gc_init_[7] = init(0);
+			gc_init_[8] = init(1);
+		}
 	}
 	
  
@@ -391,9 +397,9 @@ class ENVIRONMENT : public RaisimGymEnv {
 		}
 
 
-		/*pTarget_.tail(nJoints_) << 0.2*std::sin(2*M_PI*5000*t), 0.2*std::sin(2*M_PI*5000*t + 0.25), 0;
+		pTarget_.tail(nJoints_) << 0.2*std::sin(2*M_PI*5000*t), 0.2*std::sin(2*M_PI*5000*t + 0.25), 0;
 		linkTorque_.tail(3) << 20*(pTarget_.tail(nJoints_) -  gc_.tail(3)) - 0.2*gv_.tail(3);	
-		t+=control_dt_;*/
+		t+=control_dt_;
 		
 		if(implicitIntegration)
 			prisma_walker->setPdTarget(pTarget_, vTarget_);
@@ -402,9 +408,9 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 
 		if(ActuatorConnected_){
-			//motors->sendCommand(linkTorque_.tail(nJoints_), sea_included_);
+			motors->sendCommand(linkTorque_.tail(nJoints_), sea_included_);
 			//If you want to try the sinusoidal
-			motors->sendCommand(pTarget_.tail(nJoints_), sea_included_);
+			//motors->sendCommand(pTarget_.tail(nJoints_), sea_included_);
 		}
 
 

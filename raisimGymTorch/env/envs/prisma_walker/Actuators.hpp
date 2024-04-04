@@ -125,7 +125,9 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
     std::this_thread::sleep_for(std::chrono::milliseconds((long int) (period * 1000)));
   }
 }*/
-
+void setInitialState(){
+	
+}
 
 void sendCommand(Eigen::VectorXd torqueOrPositionCommand, bool effort){
 
