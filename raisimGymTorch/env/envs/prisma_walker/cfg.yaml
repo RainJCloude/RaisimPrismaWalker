@@ -13,7 +13,7 @@ environment:
   num_seq: 3
   num_seq_vel: 2
   sea_included: false
-  use_privileged: true
+  use_privileged: false
   implicitIntegration: false
   reward:
     torque:
@@ -29,7 +29,7 @@ environment:
     dynamixel_joint:
       coeff: 0.3 
     Joint_positions:
-      coeff: 0.5
+      coeff: -0.5
     Joint_velocity: 
       coeff: -0.001
     Joint_accelerations: 

@@ -41,6 +41,10 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 	portHandler_ = dynamixel::PortHandler::getPortHandler(deviceName);
 	packetHandler_ = dynamixel::PacketHandler::getPacketHandler(protocolVersion);
 	group_ = lookup_.getGroupFromNames({"X5-4"}, {"X-01059", "X-01077"} );
+
+	
+	//control_strategy = hebi::Command::ControlStrategy::Strategy2;
+
 	/*if(controlStrategyInt == 1)
 		control_strategy = hebi::Command::ControlStrategy::DirectPWM;
 	else if(controlStrategyInt == 2)
@@ -65,9 +69,9 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 				cmd_[module_index].settings().actuator().controlStrategy().set(control_strategy);
 				//positionGain() return a reference to an object CommandGain that is an using to the class Gains templated with its proper argmunts
 				//When the class has been templated, I can use its methods
-				cmd_[module_index].settings().actuator().positionGains().kP().set(80);
+				cmd_[module_index].settings().actuator().positionGains().kP().set(20);
 				cmd_[module_index].settings().actuator().positionGains().kI().set(0.0);
-				cmd_[module_index].settings().actuator().positionGains().kD().set(-0.09);
+				cmd_[module_index].settings().actuator().positionGains().kD().set(-0.2);
 
 				cmd_[module_index].settings().actuator().velocityGains().kP().set(0.0);
 				cmd_[module_index].settings().actuator().velocityGains().kI().set(0.0);
@@ -98,8 +102,8 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 		//inputs for the RL policy: there is misalignment between the
 		//proprioceptive state and the visual observation in the real
 		//robot
-		joint_history_pos_.setZero(num_pos*3);
-		joint_history_vel_.setZero(num_vel*3);
+		joint_history_pos_.setZero(num_pos*2);
+		joint_history_vel_.setZero(num_vel*2);
 		
 		int dxl_comm_result = packetHandler_->write1ByteTxRx(portHandler_, dxl_id, addrTorqueEnable, TorqueEnable, &dxl_error_);
 	}
@@ -129,14 +133,14 @@ void setInitialState(){
 	
 }
 
-void sendCommand(Eigen::VectorXd torqueOrPositionCommand, bool effort){
+void sendCommand(Eigen::VectorXd torqueOrPositionCommand, bool positionCommand){
 
-	if(!effort)
+	if(positionCommand)
 		cmd_.setPosition(torqueOrPositionCommand.head(2));
 	else 
 		cmd_.setEffort(torqueOrPositionCommand.head(2));
 
-	group_->sendCommand(cmd_);
+ 	group_->sendCommand(cmd_);
 	//the size of the byte that you should write is visible in the control table
 	int dxl_comm_result = packetHandler_->write4ByteTxRx(portHandler_, dxl_id, addrGoalPosition, torqueOrPositionCommand[2], &dxl_error_);
 
@@ -194,7 +198,7 @@ Eigen::VectorXd dataPlotMotorVariables(){
 	return motorVariables;
 }
 
-Eigen::VectorXd getFeedback(const double m1Pos, const double m2Pos){
+Eigen::VectorXd getFeedback(const bool usePrivileged, const double m1Pos, const double m2Pos){
 
 	group_->sendFeedbackRequest();
 	group_->getNextFeedback(Gfeedback_);
@@ -240,26 +244,34 @@ Eigen::VectorXd getFeedback(const double m1Pos, const double m2Pos){
 	double error1 = m1_pos_fbk - m1Pos;
 	double error2 = m2_pos_fbk - m2Pos;
 	//initialize always the 
-	observations.setZero(9 + 2 + joint_history_pos_.size() + joint_history_vel_.size());
-	observations << m.row(1).transpose(),
-			m.row(2).transpose(),
-			bodyAngularVel_,
-			error1,
-			error2,
-			joint_history_pos_, 
-			joint_history_vel_;
-	
+	if(usePrivileged){
+		observations.setZero(9 + 2 + joint_history_pos_.size() + joint_history_vel_.size());
+		/*observations << m.row(1).transpose(),
+				m.row(2).transpose(),
+				bodyAngularVel_,
+				error1,
+				error2,
+				joint_history_pos_, 
+				joint_history_vel_;
+		*/
+	}
+	else{
+		observations.setZero(joint_history_pos_.size() + joint_history_vel_.size());
+		observations << joint_history_pos_, 
+				joint_history_vel_;
+	}
+
 
 	return observations;
 }     
 
 void updateJointHistory(Eigen::Vector3d motor_pos, Eigen::Vector3d motor_vel){
 	
-	joint_history_pos_.head(joint_history_pos_.size() - 3) = joint_history_pos_.tail(joint_history_pos_.size() - 3);
-	joint_history_vel_.head(joint_history_vel_.size() - 3) = joint_history_vel_.tail(joint_history_vel_.size() - 3);
+	joint_history_pos_.head(joint_history_pos_.size() - 2) = joint_history_pos_.tail(joint_history_pos_.size() - 2);
+	joint_history_vel_.head(joint_history_vel_.size() - 2) = joint_history_vel_.tail(joint_history_vel_.size() - 2);
 	
-	joint_history_pos_.tail(3) = motor_pos;
-	joint_history_vel_.tail(3) = motor_vel;
+	joint_history_pos_.tail(2) = motor_pos.head(2);
+	joint_history_vel_.tail(2) = motor_vel.head(2);
 }
 
 void checkMotors(){};
