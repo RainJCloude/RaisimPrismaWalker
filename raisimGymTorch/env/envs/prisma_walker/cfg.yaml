@@ -3,12 +3,12 @@ record_video: yes
 
 environment:
   render: True
-  num_envs: 120
-  eval_every_n: 250
+  num_envs: 1
+  eval_every_n: 2
   num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
-  max_time: 5 
+  max_time: 5
   action_std: 0.1
   num_seq: 3
   num_seq_vel: 2
@@ -28,10 +28,12 @@ environment:
       coeff: -0.3
     dynamixel_joint:
       coeff: 0.3 
+    Joint_positions:
+      coeff: -0.5
     Joint_velocity: 
       coeff: -0.001
     Joint_accelerations: 
-      coeff: -9e-6
+      coeff: -8e-6
     BodyMovementWithLateralFeet:
       coeff: -0.45
     ground_clearence:
@@ -40,8 +42,8 @@ environment:
       coeff: 1
 
 architecture:
-  policy_net: [512, 256, 128]
-  value_net: [512, 256, 128]
+  policy_net: [256, 128]
+  value_net: [128, 128]
 
   
 

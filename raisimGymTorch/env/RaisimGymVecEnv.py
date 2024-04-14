@@ -37,6 +37,11 @@ class RaisimGymVecEnv:
         self.q = np.zeros(3, dtype=np.float32)
         self.dotq = np.zeros(3, dtype=np.float32)
         self.ddotq = np.zeros(3, dtype=np.float32)
+        self.yaw = np.zeros(3, dtype=np.float32)
+        self.pitch = np.zeros(3, dtype=np.float32)
+        self.bodyAngularVel = np.zeros(3, dtype=np.float32)
+        self.currentAction = np.zeros(3, dtype=np.float32)
+ 
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -115,6 +120,23 @@ class RaisimGymVecEnv:
     def getAccelerations(self):
          self.wrapper.getJointAccelerations(self.ddotq)
          return self.ddotq   
+
+    def getPitch(self):
+         self.wrapper.getPitch(self.pitch)
+         return self.pitch
+    
+    def getYaw(self):
+         self.wrapper.getYaw(self.yaw)
+         return self.yaw
+
+    def getAngularVel(self):
+         self.wrapper.getAngularVel(self.bodyAngularVel)
+         return self.bodyAngularVel  
+
+    def getCurrentAction(self):
+         self.wrapper.getCurrentAction(self.currentAction)
+         return self.currentAction 
+
          
     def command_vel(self, v_x, v_y, omega_z):   
         self.wrapper.command_vel(v_x, v_y, omega_z)

@@ -108,6 +108,22 @@ class VectorizedEnvironment {
     environments_[0]->getActualTorques(tau);
 	}
 
+  void getPitch(Eigen::Ref<EigenVec>& pitch){
+		environments_[0]->getPitch(pitch);
+	}
+
+	void getYaw(Eigen::Ref<EigenVec>& yaw){
+		environments_[0]->getYaw(yaw);
+	}
+
+	void getAngularVel(Eigen::Ref<EigenVec>& angVel){
+		environments_[0]->getAngularVel(angVel);
+	}
+	
+	void getCurrentAction(Eigen::Ref<EigenVec>& currAct){
+		environments_[0]->getCurrentAction(currAct);
+	}
+
   void getJointAccelerations(Eigen::Ref<EigenVec> &acc){
         raisim::VectorizedEnvironment<ChildEnvironment>::environments_[0]->getJointAccelerations(acc);
   }
