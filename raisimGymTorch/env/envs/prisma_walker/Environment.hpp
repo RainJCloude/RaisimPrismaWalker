@@ -85,7 +85,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		READ_YAML(bool, use_privileged_, cfg_["use_privileged"]);
 		READ_YAML(bool, implicitIntegration, cfg_["implicitIntegration"]);
 		
-		numJointsControlled = 2;
+		numJointsControlled = 3;
 		num_step = max_time/control_dt_;
 		historyPosLength_ = numJointsControlled*num_seq;
 		historyVelLength_ = numJointsControlled*num_seq_vel;
@@ -345,7 +345,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		if(!sea_included_){
 
-			motorTorque = 20*(pTarget3_ - gc_.tail(3)) - 0.2*gv_.tail(3);
+			motorTorque = 25*(pTarget3_ - gc_.tail(3)) - 0.8*gv_.tail(3);
 
 			for(int i = 0; i< motorTorque.size(); i++){
 				motorTorque(i) = std::clamp(motorTorque[i], -gearRatio*7, gearRatio*7);
@@ -710,7 +710,7 @@ void curriculumUpdate() {
 		actual_step_ = 0;
 		error_penalty_ = 0;
 
-		if(num_episode_ > 500){
+		if(num_episode_ > 100){
 			if(!fallen_){
 				if(disturbanceGone_ = true){
 					disturbanceFactor_ += 0.0025;
