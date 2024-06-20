@@ -3,6 +3,7 @@ from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
 from raisimGymTorch.env.bin.prisma_walker import NormalSampler
 from raisimGymTorch.env.bin.prisma_walker import RaisimGymEnv
+from raisimGymTorch.env.RewardAnalyzer import RewardAnalyzer
 import os
 import math
 import time
@@ -63,22 +64,22 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
-
-#tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
               num_envs=cfg['environment']['num_envs'],
               num_transitions_per_env=n_steps,
-              num_learning_epochs=3,
-              gamma=0.9985,
-              lam=0.975,
+              num_learning_epochs=4,
+              gamma=0.996,
+              lam=0.95,
               num_mini_batches=4,
               device=device,
               log_dir=saver.data_dir,
               shuffle_batch=False,
               )
 
+#reward_analyzer = RewardAnalyzer(env, ppo.writer)
 
 if mode == 'retrain':
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
@@ -90,7 +91,7 @@ for update in range(1000000):
     done_sum = 0
     average_dones = 0.
 
-    if update % cfg['environment']['eval_every_n'] == 0 and update !=0:
+    if update % cfg['environment']['eval_every_n'] == 0:
         print("Visualizing and evaluating the current policy")
         torch.save({
             'actor_architecture_state_dict': actor.architecture.state_dict(),
@@ -127,7 +128,6 @@ for update in range(1000000):
     # actual training
     for step in range(n_steps):
         obs = env.observe()
-        #print(obs[0,:])
         action = ppo.act(obs)
         reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
@@ -142,7 +142,7 @@ for update in range(1000000):
     avg_rewards.append(average_ll_performance)
 
     actor.update()
-    actor.distribution.enforce_minimum_std((torch.ones(act_dim)*0.2).to(device))
+    actor.distribution.enforce_minimum_std((torch.ones(3)*0.2).to(device))
 
     # curriculum update. Implement it in Environment.hpp
     env.curriculum_callback()

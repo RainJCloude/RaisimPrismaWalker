@@ -1,8 +1,8 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
-from raisimGymTorch.env.bin.prisma_walker import NormalSampler
 from raisimGymTorch.env.bin.prisma_walker import RaisimGymEnv
+#from raisimGymTorch.env.bin.prisma_walker import GenCoordFetcher
 import os
 import math
 import time
@@ -167,9 +167,11 @@ if __name__ == '__main__':
         # configuration
     parser = argparse.ArgumentParser()
     parser.add_argument('-w', '--weight', help='trained weight path', type=str, default='')
-    parser.add_argument('-v', '--velocity', nargs='+', help = 'command velocity for the quadruped', type=float, default = [1, 0, 0.1]) #nargs take more than 1 argument
+    parser.add_argument('-v', '--velocity', nargs='+', help = 'command velocity for the quadruped', type=float, default = [0.0]) #nargs take more than 1 argument
 
     args = parser.parse_args()
+
+    print(args.velocity)
     task_name = "prisma_walker_locomotion"
     # directories
     task_path = os.path.dirname(os.path.realpath(__file__))
@@ -183,17 +185,17 @@ if __name__ == '__main__':
     max_simulation_duration = cfg['environment']['max_time']
 
     env = VecEnv(RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
+    env.command_vel(*args.velocity)
 
     # shortcuts
     ob_dim = env.num_obs
     act_dim = env.num_acts
     control_dt = 0.01
 
-    weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/cancel/full_2.pt"
+    weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/ang1/full_1000.pt"
 
     iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
     weight_dir = weight_path.rsplit('/', 1)[0] + '/'
-    #flag = env.motors_check_()
 
     #duration in ms of the simulation
     max_steps = 4000

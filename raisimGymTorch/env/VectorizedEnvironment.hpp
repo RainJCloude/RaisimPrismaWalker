@@ -96,6 +96,10 @@ class VectorizedEnvironment {
     environments_[0]->getReference(pTarget);
 	}
 
+  void command_vel(const double omega_vel){
+    environments_[0]->command_vel(omega_vel);
+	}
+
   void getJointPositions(Eigen::Ref<EigenVec> &q){
     environments_[0]->getJointPositions(q);
 	}
@@ -303,7 +307,7 @@ class NormalSampler {
  
 
 template <class ChildEnvironment>
-struct GenCoordFetcher: public raisim::VectorizedEnvironment <ChildEnvironment>{
+struct GenCoordFetcher: public raisim::VectorizedEnvironment<ChildEnvironment>{
 
   /*GenCoordFetcher(ChildEnvironment* env)
   : raisim::VectorizedEnvironment<ChildEnvironment>::environments_(env){ //ChildEnvironment* env = environments_[0]

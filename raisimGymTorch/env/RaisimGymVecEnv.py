@@ -22,7 +22,7 @@ class RaisimGymVecEnv:
         self.actions = np.zeros([self.num_envs, self.num_acts], dtype=np.float32)
         self.log_prob = np.zeros(self.num_envs, dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
-        self._done = np.zeros(self.num_envs, dtype=np.bool)
+        self._done = np.zeros(self.num_envs, dtype=bool)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.wrapper.setSeed(seed)
         self.count = 0.0
@@ -67,6 +67,12 @@ class RaisimGymVecEnv:
     def step(self, action):
         self.wrapper.step(action, self._reward, self._done)
         return self._reward.copy(), self._done.copy()
+
+    def get_reward_info(self):
+        return self.wrapper.getRewardInfo()
+    
+    def command_vel(self, omega_z):
+        self.wrapper.command_vel(omega_z)
 
     def load_scaling(self, dir_name, iteration, count=1e5):
         mean_file_name = dir_name + "/mean" + str(iteration) + ".csv"
@@ -137,9 +143,6 @@ class RaisimGymVecEnv:
          self.wrapper.getCurrentAction(self.currentAction)
          return self.currentAction 
 
-         
-    def command_vel(self, v_x, v_y, omega_z):   
-        self.wrapper.command_vel(v_x, v_y, omega_z)
         
     @property
     def num_envs(self):

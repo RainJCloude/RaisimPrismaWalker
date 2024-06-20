@@ -3,8 +3,8 @@ record_video: yes
 
 environment:
   render: True
-  num_envs: 1
-  eval_every_n: 2
+  num_envs: 100
+  eval_every_n: 200
   num_threads: 14
   simulation_dt: 0.001
   control_dt: 0.01
@@ -19,7 +19,7 @@ environment:
     torque:
       coeff: -0.00025
     imitation:
-      coeff: 0.8
+      coeff: 1.5
     slip:
       coeff: -0.4
     error_penalty:
@@ -27,7 +27,7 @@ environment:
     angular_penalty:
       coeff: -0.3
     dynamixel_joint:
-      coeff: 0.3 
+      coeff: 0.5 
     Joint_positions:
       coeff: -0.5
     Joint_velocity: 
@@ -37,7 +37,7 @@ environment:
     BodyMovementWithLateralFeet:
       coeff: -0.45
     ground_clearence:
-      coeff: 0.2
+      coeff: 0.8
     torque_limit:
       coeff: 1
 
