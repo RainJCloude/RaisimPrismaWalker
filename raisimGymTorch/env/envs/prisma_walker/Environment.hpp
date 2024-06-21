@@ -49,7 +49,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		prisma_walker = world_->addArticulatedSystem(home_path_ + "/rsc/prisma_walker/urdf/prisma_walker.urdf");
 		prisma_walker->setName("prisma_walker");
 		prisma_walker->setControlMode(raisim::ControlMode::FORCE_AND_TORQUE);
-		world_->addGround();
+		world_->addGround(0.0, "ground");
 
 		/// get robot data
 		gcDim_ = prisma_walker->getGeneralizedCoordinateDim();
@@ -124,7 +124,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		rewards_.initializeFromConfigurationFile (cfg["reward"]);
 
 		foot_center_ = prisma_walker->getFrameIdxByLinkName("piede_interno"); //since there is a fixed joint, I cant assign a body idx to it
- 
+
 		m1_pos_.setZero(traj_size);
 		m2_pos_.setZero(traj_size); 
 		/// visualize if it is the first environment
@@ -303,9 +303,12 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 
 	void reset() final {
+		//you put this in the step and got seg fault
+		Singlestep(rn_.sampleUniform01()*stepHeight);
+
 		motorSpring_ = 20 + rn_.sampleUniform01()*180; //min and max of the spring coefficient
 
-		setFriction();
+		setFriction("ground");
 		previous_height_ = 0;
 		alfa_z_ = 0;
 		max_height_ = 0;
@@ -329,6 +332,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		prisma_walker->setState(gc_init_, gv_init_);
 		updateObservation();
 		computedTorques.setZero();
+
+		prisma_walker->getFramePosition(foot_center_, prisma_walker_pos);
 	}
 	
  
@@ -382,8 +387,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 			if(theta(0) >= 1.57 || theta(0) <= -1.57 || theta(1) >= 1.57 || theta(1) <= -1.57)
 				rewards_.record("Joint_positions", -1);
 		}
-
-		
 	
 
 		if(implicitIntegration){
@@ -423,6 +426,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		imitation_function();
 		external_force();
 
+
 		ga_ = (joint_history_vel_.segment(3,3) - joint_history_vel_.segment(0,3))/control_dt_;
 
 		rewards_.record("Joint_velocity", curr_fact* gv_.segment(6,2).squaredNorm());
@@ -446,6 +450,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			gc_init_[8] = gc_[8];
 		}
 
+		
 		//std::cout<<slip_term_<<std::endl;
 
 		return rewards_.sum();
@@ -508,8 +513,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 			} 
 			if(contact.getlocalBodyIndex() == 0 ){  
 				cF_["lateral_feet"] = 1; 
-			}      
+			}     
+			//std::cout<<world_->getObject(contact.getPairObjectIndex())<<std::endl; 
 		}
+
 
 		//Slippage
 		slip_term_ = 0;
@@ -724,8 +731,12 @@ void curriculumUpdate() {
 				for(int i = 0; i < gvDim_; i++){
 					currRand_jointVel_[i] += 0.001;
 				}
+				stepHeight = std::pow(stepHeight, curriculumDecayFactor_);
+				curriculumDecayFactor_ = std::clamp(curriculumDecayFactor_ - 0.00025, 0.98, 0.99);
 			}
 			else{
+				stepHeight = 0.992*std::pow(10, 1/curriculumDecayFactor_*log10(stepHeight));
+				curriculumDecayFactor_ = std::clamp(curriculumDecayFactor_ + 0.00025, 0.98, 0.99);
 				reduceRand();
 			}
 
@@ -745,45 +756,45 @@ void curriculumUpdate() {
 	};
 
 
-	void setFriction(){
+	void setFriction(std::string terrainName){
 		double friction_coefficient = 0;
-		if(num_episode_ < 200){   //if else are better for boolean. WHen you have nested conditions like this use switch
+		if(num_episode_ < 100){   //if else are better for boolean. WHen you have nested conditions like this use switch
 			friction_coefficient = 0.9;
 			prisma_walker->getMass()[0] = realMass_[0] + 0.07*rn_.sampleUniform() + 0.2; 
 			prisma_walker->getMass()[1] = realMass_[1] + 0.03*rn_.sampleUniform() + 0.2; 
 			prisma_walker->getMass()[2] = realMass_[2] + 0.02*rn_.sampleUniform() + 0.08; 
 			prisma_walker->getMass()[3] = realMass_[3] + 0.04*rn_.sampleUniform();
 		}
-		else if (num_episode_ < 500){
+		else if (num_episode_ < 200){
 			friction_coefficient = 0.75 + rn_.sampleUniform01() * 0.15; //linear interpolation
 			prisma_walker->getMass()[0] = realMass_[0] + 0.18*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[1] = realMass_[1] + 0.08*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.03*rn_.sampleUniform() + 0.08;
 			prisma_walker->getMass()[3] = realMass_[3] + 0.09*rn_.sampleUniform();
 		}
-		else if (num_episode_ < 800){
+		else if (num_episode_ < 500){
 			friction_coefficient = 0.5 + rn_.sampleUniform01() * 0.4;
 			prisma_walker->getMass()[0] = realMass_[0] + 0.30*rn_.sampleUniform() + 0.2; 
 			prisma_walker->getMass()[1] = realMass_[1] + 0.12*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.04*rn_.sampleUniform() + 0.08;
 			prisma_walker->getMass()[3] = realMass_[3] + 0.15*rn_.sampleUniform();
 		}
-		else if (num_episode_ < 1100){
-			friction_coefficient = 0.3 + rn_.sampleUniform01() * 0.2;
+		else if (num_episode_ < 600){
+			friction_coefficient = 0.45 + rn_.sampleUniform01() * 0.45;
 			prisma_walker->getMass()[0] = realMass_[0] + 0.40*rn_.sampleUniform() + 0.2; 
 			prisma_walker->getMass()[1] = realMass_[1] + 0.18*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.05*rn_.sampleUniform() + 0.08;
 			prisma_walker->getMass()[3] = realMass_[3] + 0.20*rn_.sampleUniform();
 		}
-		else if (num_episode_ <= 1600){
-			friction_coefficient = 0.25 + rn_.sampleUniform01() * 0.75; //[0,25,1]
+		else if (num_episode_ <= 800){
+			friction_coefficient = 0.4 + rn_.sampleUniform01() * 0.5; //[0,25,1]
 			prisma_walker->getMass()[0] = realMass_[0] + 0.45*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[1] = realMass_[1] + 0.20*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.07*rn_.sampleUniform() + 0.08;
 			prisma_walker->getMass()[3] = realMass_[3] + 0.23*rn_.sampleUniform();
 		}
-		else if (num_episode_ > 1600){
-			friction_coefficient = 0.25 + rn_.sampleUniform01() * 0.75; //[0,25,1]
+		else if (num_episode_ > 1000){
+			friction_coefficient = 0.4 + rn_.sampleUniform01() * 0.5; //[0,25,1]
 			prisma_walker->getMass()[0] = realMass_[0] + 0.55*rn_.sampleUniform() + 0.2; 
 			prisma_walker->getMass()[1] = realMass_[1] + 0.22*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.09*rn_.sampleUniform() + 0.08;
@@ -795,7 +806,7 @@ void curriculumUpdate() {
 		0.284909*/
 
 		prisma_walker -> updateMassInfo();
-		world_->setMaterialPairProp("ground", "foot", friction_coefficient, 0.0, 0.001); //mu, bouayancy, restitution velocity (and minimum impact velocity to make the object bounce) 
+		world_->setMaterialPairProp(terrainName, "foot", friction_coefficient, 0.0, 0.001); //mu, bouayancy, restitution velocity (and minimum impact velocity to make the object bounce) 
 		
 	}
 
@@ -828,6 +839,35 @@ void curriculumUpdate() {
 		
 	}
 
+	void Singlestep(float single_height){
+
+		float pixelSize_ = 0.02;
+		terrainProp_.xSize = 6.0;
+		terrainProp_.ySize = 6.0;
+		terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
+		terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
+
+		heights_.resize(terrainProp_.xSamples * terrainProp_.ySamples);
+		Eigen::Map<Eigen::Matrix<double, -1, -1>> mapMat(heights_.data(),
+														terrainProp_.xSamples,
+														terrainProp_.ySamples);
+		
+		double stepwidth = 0.2;
+		double stepsize = stepwidth/pixelSize_;
+		mapMat.setConstant(0.01);
+		mapMat.block(stepwidth/pixelSize_, stepwidth/pixelSize_, terrainProp_.xSamples - 2*stepsize , terrainProp_.ySamples - 2*stepsize).setConstant(single_height); 
+		mapMat.block(2*stepwidth/pixelSize_, 2*stepwidth/pixelSize_, terrainProp_.xSamples - 4*stepsize , terrainProp_.ySamples - 4*stepsize).setConstant(2*single_height); 
+		
+		
+      	terrain_ = world_->addHeightMap(terrainProp_.xSamples,
+                                    terrainProp_.ySamples,
+                                    terrainProp_.xSize,
+                                    terrainProp_.ySize,
+                                    prisma_walker_pos[0] + 3.5, 0.0, heights_, "ground_heightMap");  //ground is the name of the material, useful to set the friction
+		
+ 
+		setFriction("ground_heightMap");
+	}
 
 	private:
 		std::string home_path_;
@@ -852,7 +892,9 @@ void curriculumUpdate() {
 		raisim::Vec<4> quat_;
 		raisim::Mat<3,3> rot_;
 		size_t foot_center_;
+		raisim::Vec<3> prisma_walker_pos;
 		raisim::Vec<3> vel_, footPosition_;
+
 		/// these variables are not in use. They are placed to show you how to create a random number sampler.
 		std::normal_distribution<double> normDist_;
 		RandomNumberGenerator<float> rn_;
@@ -919,6 +961,14 @@ void curriculumUpdate() {
 		
 		int numJointsControlled = 0;
 
+		//step:
+		std::vector<double> heights_;
+		raisim::HeightMap *terrain_;
+        raisim::TerrainProperties terrainProp_;
+		float stepHeight = 0.001;
+		double curriculumDecayFactor_ = 0.98;
+
+
 	protected:
 		Eigen::VectorXd gc_, gv_, ga_, pTarget_;
 		Eigen::Vector3d computedTorques;
@@ -931,4 +981,6 @@ void curriculumUpdate() {
 //thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
 
 }
+
+
 
