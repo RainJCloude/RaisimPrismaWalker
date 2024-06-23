@@ -3,7 +3,7 @@ record_video: yes
 
 environment:
   render: True
-  num_envs: 1
+  num_envs: 100
   eval_every_n: 200
   num_threads: 14
   simulation_dt: 0.001
@@ -13,37 +13,35 @@ environment:
   num_seq: 3
   num_seq_vel: 2
   sea_included: false
-  use_privileged: true
+  use_privileged: false
   implicitIntegration: false
   reward:
     torque:
-      coeff: -0.00025
+      coeff: -0.001
     imitation:
-      coeff: 1.5
+      coeff: 0.6
     slip:
-      coeff: -0.4
+      coeff: -0.5
     error_penalty:
       coeff: -1
     angular_penalty:
-      coeff: -0.3
-    dynamixel_joint:
-      coeff: 0.5 
-    Joint_positions:
-      coeff: -0.5
+      coeff: -1
+    dynamixel:
+      coeff: 0.5
+    dynamixel_joint_vel:
+      coeff: 0.2
     Joint_velocity: 
-      coeff: -0.001
-    Joint_accelerations: 
-      coeff: -8e-6
+      coeff: -0.04
     BodyMovementWithLateralFeet:
-      coeff: -0.45
-    ground_clearence:
-      coeff: 0.8
+      coeff: -0.5
+    ground_clearance:
+      coeff: 0.5
     torque_limit:
       coeff: 1
 
 architecture:
-  policy_net: [256, 128]
-  value_net: [128, 128]
+  policy_net: [128, 64, 32]
+  value_net: [64, 64]
 
   
 

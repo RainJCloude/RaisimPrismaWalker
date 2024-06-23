@@ -16,6 +16,7 @@ class Actor:
         self.action_mean = None
     
     def sample(self, obs):
+
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
         #print("obs: ", obs[0,:])
         #print("action mean: ", self.action_mean)
@@ -52,6 +53,24 @@ class Actor:
     def action_shape(self):
         return self.architecture.output_shape
 
+
+class ActorRnn(Actor):
+    def __init__(self, architecture, distribution, device='cpu'):
+        super(ActorRnn, self).__init__(architecture, distribution, device=device)
+
+
+    def sample(self, obs):
+        #compute logit
+        "obs is (num_envs, num_obs)"
+        obs.reshape(obs[0], num_seq, -1) #(batch, Lenght, input_size)
+        h0 = torch.zeros(1, obs[0], shape[0]) #need a forward method
+        self.action_mean = self.architecture.architecture(obs).cpu().numpy()
+        #print("obs: ", obs[0,:])
+        #print("action mean: ", self.action_mean)
+
+        actions, log_prob = self.distribution.sample(self.action_mean)
+        return actions, log_prob
+    
 
 class Critic:
     def __init__(self, architecture, device='cpu'):
@@ -110,14 +129,13 @@ class ReturnShape(nn.Module): #here i define or a complete NN or a set of layer 
             obs = obs.view(-1, obs.shape[-1])
             return obs
  
-
-
 class MLP(nn.Module):
     def __init__(self, shape, actionvation_fn, input_size, output_size, num_envs):
         super(MLP, self).__init__()
         self.activation_fn = actionvation_fn
 
         modules = [nn.Linear(input_size, shape[0]), self.activation_fn()]
+
         scale = [np.sqrt(2)]
 
         for idx in range(len(shape)-1):
@@ -143,6 +161,38 @@ class MLP(nn.Module):
     def init_weights(sequential, scales):
         [torch.nn.init.orthogonal_(module.weight, gain=scales[idx]) for idx, module in
          enumerate(mod for mod in sequential if isinstance(mod, nn.Linear))]
+
+class RNN(nn.Module):
+    def __init__(self, shape, actionvation_fn, input_size, output_size, num_envs):
+        super().__init__()
+        modules = [nn.RNN(input_size, shape[0], num_layers = 1, batch_first = True), self.activation_fn()]
+
+        ho = torch.zeros(1, num_envs, shape[0]) #num_layers, batch, hidden_size
+        c0 = torch.zeros(1, num_envs, shape[0])
+
+        scale = [np.sqrt(2)]
+        for idx in range(len(shape)-1):
+            modules.append(nn.RNN(shape[idx], shape[idx+1], num_layers = 1, batch_first = True))  #linear can receive any tensor in input, the important is that its last channel has the correct dimension
+            modules.append(self.activation_fn())
+            modules.append(nn.Dropout(0.4))#After the activation, unless you use RELU. In that case is influent
+            #Dropouts scales the output of the NN to preserve the value of the output if we didn' kill any perceptron 
+            scale.append(np.sqrt(2))
+        
+        #output Layer
+        modules.append(nn.Linear(shape[-1], output_size))
+
+        self.architecture = nn.Sequential(*modules)
+        scale.append(np.sqrt(2))
+
+        self.init_weights(self.architecture, scale)
+        self.input_shape = [input_size]
+        self.output_shape = [output_size]
+
+    @staticmethod
+    def init_weights(sequential, scales):
+        [torch.nn.init.orthogonal_(module.weight, gain=scales[idx]) for idx, module in
+         enumerate(mod for mod in sequential if isinstance(mod, nn.Linear))]
+
 
 
 class MultivariateGaussianDiagonalCovariance(nn.Module):

@@ -48,6 +48,9 @@ num_threads = cfg['environment']['num_threads']
 
 # Training
 n_steps = math.floor(cfg['environment']['max_time'] / cfg['environment']['control_dt'])
+seq_pos = cfg['environment']['num_seq']
+seq_vel = cfg['environment']['num_seq_vel']
+
 total_steps = n_steps * env.num_envs
 
 avg_rewards = []

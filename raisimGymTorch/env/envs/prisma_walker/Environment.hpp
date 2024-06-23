@@ -102,7 +102,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		prisma_walker->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
 		/// MUST BE DONE FOR ALL ENVIRONMENTS
-		obDim_ = historyPosLength_ + historyVelLength_ + 3, + 3;
+		obDim_ = historyPosLength_ + historyVelLength_ + 3 ;
 		int privileged_obs_dim = 6 + 3;
 		//pitch + yaw + bodyLinearVel + bodyAngularVel + currentImitationError + bodyHeight + footState
 		//+nextMotorPos	
@@ -176,7 +176,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 	void openFile(){
 
 		std::fstream m1_traj;
-    		std::fstream m2_traj;
+    	std::fstream m2_traj;
 
 		m1_traj.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/pos_m1_18s.txt", std::ios::in);
     	m2_traj.open(home_path_ + "/raisimGymTorch/raisimGymTorch/env/envs/prisma_walker/pos_m2_18s.txt", std::ios::in);
@@ -304,7 +304,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	void reset() final {
 		//you put this in the step and got seg fault
-		Singlestep(rn_.sampleUniform01()*stepHeight);
+		if(num_episode_ > 1000)
+			Singlestep(rn_.sampleUniform01()*stepHeight);
 
 		motorSpring_ = 20 + rn_.sampleUniform01()*180; //min and max of the spring coefficient
 
@@ -318,6 +319,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 			gc_init_[7] = m1_pos_(index_imitation_ - 1);
 			gc_init_[8] = m2_pos_(index_imitation_ - 1);
+			gc_init_[9] = 0.7*rn_.sampleUniform();
 		}
 
 		nonLinearTerms_vecDyn_ = prisma_walker->getNonlinearities(world_->getGravity());
@@ -342,12 +344,12 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		pTarget3_ = action.cast<double>(); //dim=n_joints
 		pTarget3_ = pTarget3_.cwiseProduct(actionStd_);
-		actionMean_ << m1_pos_(index_imitation_), m2_pos_(index_imitation_), 0.0;
+		actionMean_ << m1_pos_(index_imitation_), m2_pos_(index_imitation_), angular_command_;
 		pTarget3_ += actionMean_;
 		current_action_ = pTarget3_;
 
 		//std::cout<<"index imitation: "<<index_imitation_<<std::endl;
-
+		
 		if(!sea_included_){
 
 			motorTorque = 25*(pTarget3_ - gc_.tail(3)) - 0.8*gv_.tail(3);
@@ -412,7 +414,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 				motors->sendCommand(linkTorque_.tail(nJoints_), false);
 		}
 	 
-
 		for(int i=0; i< int(control_dt_ / simulation_dt_ + 1e-10); i++){
 			if(server_) server_->lockVisualizationServerMutex();
 			world_->integrate();
@@ -425,29 +426,26 @@ class ENVIRONMENT : public RaisimGymEnv {
 		incrementIndices();
 		imitation_function();
 		external_force();
-
-
+		
 		ga_ = (joint_history_vel_.segment(3,3) - joint_history_vel_.segment(0,3))/control_dt_;
-
-		rewards_.record("Joint_velocity", curr_fact* gv_.segment(6,2).squaredNorm());
+		rewards_.record("Joint_velocity", curr_fact* gv_.tail(3).squaredNorm());
 		rewards_.record("torque", prisma_walker->getGeneralizedForce().squaredNorm());
 		rewards_.record("error_penalty", error_penalty_);
+		
 		rewards_.record("imitation", std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_)));
 		
-		if(cF_["center_foot"] == 1)
-			rewards_.record("dynamixel_joint", std::exp(-2*(1/sigma)*(bodyAngularVel_[2] - angular_command_)*(bodyAngularVel_[2] - angular_command_)));
-		
-		
-		rewards_.record("angular_penalty", bodyAngularVel_[0] + bodyAngularVel_[1]); 
+		rewards_.record("dynamixel", std::exp(-30*(error_m3_*error_m3_)));
+		//rewards_.record("angular_penalty", bodyAngularVel_[0] + bodyAngularVel_[1]); 
 		rewards_.record("slip", slip_term_);
-		rewards_.record("ground_clearence", clearance_foot_);
+		rewards_.record("ground_clearance", clearance_foot_);
 		if(cF_["center_foot"] == 0)
 			rewards_.record("BodyMovementWithLateralFeet", bodyLinearVel_.squaredNorm() + bodyAngularVel_.squaredNorm());
-
+	
 		actual_step_++;	
 		if(actual_step_ == num_step){
 			gc_init_[7] = gc_[7];
 			gc_init_[8] = gc_[8];
+			gc_init_[9] = gc_[9];
 		}
 
 		
@@ -478,13 +476,15 @@ class ENVIRONMENT : public RaisimGymEnv {
 	}
 
 	void imitation_function(){
-		if(sea_included_ && 1==2){
+		if(sea_included_){
 			error_m1_ = theta(0) - m1_pos_(index_imitation_);
 			error_m2_ = theta(1) - m2_pos_(index_imitation_);
 		}else{
 			error_m1_ = gc_[7] - m1_pos_(index_imitation_);
 			error_m2_ = gc_[8] - m2_pos_(index_imitation_);
 		}
+
+		
 	}
  
 
@@ -518,14 +518,27 @@ class ENVIRONMENT : public RaisimGymEnv {
 		}
 
 
+		Eigen::Vector3d x_axis;
+		x_axis << cos(gc_[9]), sin(gc_[9]), 0;
+		Eigen::Vector3d x_vec = rot_.e().row(0).transpose(); //x axis orientation in the world frame
+		//std::cout<<"angle between the orientation of the x axis of the base and the x axis of the foot: "<<orientationDisplacement<<std::endl;
+		double orientationDisplacement = acos(x_vec.dot(x_axis));
+		orientationDisplacement = (orientationDisplacement*180)/M_PI;
+
 		//Slippage
 		slip_term_ = 0;
 		if(cF_["center_foot"] == 1){
 			slip_term_ = std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
 			previous_height_ = 0;
+
+			//angular reward
+			error_m3_ = orientationDisplacement;
+
 		}	
-
-
+		else{
+			error_m3_ = gc_[9] - angular_command_;
+		}
+		
 		//clearance
 		if(bodyFootPos_[0] >= projectedCenterOfMass){
 			curr_fact = 1;
@@ -614,8 +627,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			else
 				obDouble_<<joint_history_pos_,
 					joint_history_vel_,
-					current_action_,
-					bodyAngularVel_;
+					current_action_;
 		}
 	}
 
@@ -663,7 +675,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 	void observe(Eigen::Ref<EigenVec> ob) final {
 		/// convert it to float
 		ob = obDouble_.cast<float>();
-		//std::cout << "ob double: " << ob.size() << std::endl;
 	}
 
 
@@ -688,6 +699,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			}
 			gc_init_[7] = m1_pos_(index_imitation_);
 			gc_init_[8] = m2_pos_(index_imitation_);
+			gc_init_[9] = 0.7*rn_.sampleUniform();
 			error_penalty_ += 0.4;
 			fallen_ = true;
 			return true;
@@ -699,7 +711,9 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 void curriculumUpdate() {
 
-		angular_command_ = rn_.sampleUniform()*0.7;
+		if(cF_["center_foot"] == 0)
+			angular_command_ = rn_.sampleUniform()*0.7;
+			angular_command_vel = rn_.sampleUniform()*0.4;
 
 		if(num_episode_ > 10 && !fallen_){
 			curr_imitation_ += 1e-6; 
@@ -744,7 +758,7 @@ void curriculumUpdate() {
 			currRand_jointPos_ = currRand_jointPos_.cwiseMin(Eigen::VectorXd::Constant(gcDim_, 0.5));
 			currRand_jointVel_ = currRand_jointVel_.cwiseMax(Eigen::VectorXd::Zero(gvDim_));
 			currRand_jointVel_ = currRand_jointVel_.cwiseMin(Eigen::VectorXd::Constant(gvDim_, 0.5));
-			RSINFO_IF(visualizable_, currRand_jointVel_)
+			//RSINFO_IF(visualizable_, "current noise level" currRand_jointVel_)
 		}
 
 		if(fallen_){
@@ -781,24 +795,24 @@ void curriculumUpdate() {
 		}
 		else if (num_episode_ < 600){
 			friction_coefficient = 0.45 + rn_.sampleUniform01() * 0.45;
-			prisma_walker->getMass()[0] = realMass_[0] + 0.40*rn_.sampleUniform() + 0.2; 
-			prisma_walker->getMass()[1] = realMass_[1] + 0.18*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[0] = realMass_[0] + 0.35*rn_.sampleUniform() + 0.2; 
+			prisma_walker->getMass()[1] = realMass_[1] + 0.15*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.05*rn_.sampleUniform() + 0.08;
-			prisma_walker->getMass()[3] = realMass_[3] + 0.20*rn_.sampleUniform();
+			prisma_walker->getMass()[3] = realMass_[3] + 0.18*rn_.sampleUniform();
 		}
 		else if (num_episode_ <= 800){
 			friction_coefficient = 0.4 + rn_.sampleUniform01() * 0.5; //[0,25,1]
-			prisma_walker->getMass()[0] = realMass_[0] + 0.45*rn_.sampleUniform() + 0.2;
-			prisma_walker->getMass()[1] = realMass_[1] + 0.20*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[0] = realMass_[0] + 0.40*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[1] = realMass_[1] + 0.18*rn_.sampleUniform() + 0.2;
 			prisma_walker->getMass()[2] = realMass_[2] + 0.07*rn_.sampleUniform() + 0.08;
-			prisma_walker->getMass()[3] = realMass_[3] + 0.23*rn_.sampleUniform();
+			prisma_walker->getMass()[3] = realMass_[3] + 0.20*rn_.sampleUniform();
 		}
-		else if (num_episode_ > 1000){
+		else if (num_episode_ > 800){
 			friction_coefficient = 0.4 + rn_.sampleUniform01() * 0.5; //[0,25,1]
-			prisma_walker->getMass()[0] = realMass_[0] + 0.55*rn_.sampleUniform() + 0.2; 
-			prisma_walker->getMass()[1] = realMass_[1] + 0.22*rn_.sampleUniform() + 0.2;
-			prisma_walker->getMass()[2] = realMass_[2] + 0.09*rn_.sampleUniform() + 0.08;
-			prisma_walker->getMass()[3] = realMass_[3] + 0.25*rn_.sampleUniform();
+			prisma_walker->getMass()[0] = realMass_[0] + 0.45*rn_.sampleUniform() + 0.2; 
+			prisma_walker->getMass()[1] = realMass_[1] + 0.20*rn_.sampleUniform() + 0.2;
+			prisma_walker->getMass()[2] = realMass_[2] + 0.08*rn_.sampleUniform() + 0.08;
+			prisma_walker->getMass()[3] = realMass_[3] + 0.22*rn_.sampleUniform();
 		}
 		/*0.951376
 		0.241507
@@ -842,8 +856,8 @@ void curriculumUpdate() {
 	void Singlestep(float single_height){
 
 		float pixelSize_ = 0.02;
-		terrainProp_.xSize = 6.0;
-		terrainProp_.ySize = 6.0;
+		terrainProp_.xSize = 2.0;
+		terrainProp_.ySize = 2.0;
 		terrainProp_.xSamples = terrainProp_.xSize / pixelSize_;
 		terrainProp_.ySamples = terrainProp_.ySize / pixelSize_;
 
@@ -920,7 +934,7 @@ void curriculumUpdate() {
 		double curr_imitation_, motorSpring_; 
 		bool fallen_ = false;
 		int actual_step_;
-		double error_m1_ = 0, error_m2_ = 0, error_m1_obs_ = 0, error_m2_obs_ = 0;
+		double error_m1_ = 0, error_m2_ = 0, error_m3_ = 0, error_m1_obs_ = 0, error_m2_obs_ = 0;
 		const float sigma = 0.4;
 		float sigma_square = sigma*sigma;
 		Eigen::VectorXd nextMotorPositions_;
@@ -960,6 +974,8 @@ void curriculumUpdate() {
 		std::vector<double> m2_stdvector_;
 		
 		int numJointsControlled = 0;
+		double angular_command_vel = 0.0;
+
 
 		//step:
 		std::vector<double> heights_;
