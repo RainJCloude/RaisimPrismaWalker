@@ -19,7 +19,7 @@ environment:
     torque:
       coeff: -0.001
     imitation:
-      coeff: 0.6
+      coeff: 0.
     slip:
       coeff: -0.5
     error_penalty:
