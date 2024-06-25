@@ -40,6 +40,7 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("stopRecordingVideo", &VectorizedEnvironment<ENVIRONMENT>::stopRecordingVideo)
     .def("startRecordingVideo", &VectorizedEnvironment<ENVIRONMENT>::startRecordingVideo)
     .def("curriculumUpdate", &VectorizedEnvironment<ENVIRONMENT>::curriculumUpdate)
+    .def("select_heightMap", &VectorizedEnvironment<ENVIRONMENT>::select_heightMap)
     .def("getObStatistics", &VectorizedEnvironment<ENVIRONMENT>::getObStatistics)
     .def("setObStatistics", &VectorizedEnvironment<ENVIRONMENT>::setObStatistics)
     .def("getActualTorques", &VectorizedEnvironment<ENVIRONMENT>::getActualTorques)
@@ -52,9 +53,11 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
     .def("getYaw", &VectorizedEnvironment<ENVIRONMENT>::getYaw)
     .def("getAngularVel", &VectorizedEnvironment<ENVIRONMENT>::getAngularVel)
     .def("getCurrentAction", &VectorizedEnvironment<ENVIRONMENT>::getCurrentAction)    
+    .def("command_vel", &VectorizedEnvironment<ENVIRONMENT>::command_vel)    
+    .def("select_terrain_from_tester", &VectorizedEnvironment<ENVIRONMENT>::select_terrain_from_tester)    
     .def(py::pickle(
         [](const VectorizedEnvironment<ENVIRONMENT> &p) { // __getstate__ --> Pickling to Python
-            /* Return a tuple that fully encodes the state of the object */
+            // Return a tuple that fully encodes the state of the object 
             return py::make_tuple(p.getResourceDir(), p.getCfgString());
         },
         [](py::tuple t) { // __setstate__ - Pickling from Python
@@ -62,32 +65,31 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
               throw std::runtime_error("Invalid state!");
             }
 
-            /* Create a new C++ instance */
+            // Create a new C++ instance 
             VectorizedEnvironment<ENVIRONMENT> p(t[0].cast<std::string>(), t[1].cast<std::string>());
 
             return p;
         }
     ));
-
+ 
 
   py::class_<NormalSampler>(m, "NormalSampler")
     .def(py::init<int>(), py::arg("dim"))
     .def("seed", &NormalSampler::seed)
     .def("sample", &NormalSampler::sample);
-
 }
 
 
-
+/*
 PYBIND11_MODULE(PlotGymVariables, m) {
     m.doc() = "pybind11 module to plot variables"; // optional module docstring
-    py::class_<GenCoordFetcher<VariablesPlot>>(m, "plotter")
+    py::class_<GenCoordFetcher<GenCoordFetcher>>(m, "plotter")
     .def("getActualTorques", &GenCoordFetcher<VariablesPlot>::getActualTorques)
     .def("getMotorTorques", &GenCoordFetcher<VariablesPlot>::getMotorTorques)
     .def("getpTarget", &GenCoordFetcher<VariablesPlot>::getpTarget)
     .def("getJointPositions", &GenCoordFetcher<VariablesPlot>::getJointPositions)
     .def("getJointVelocities", &GenCoordFetcher<VariablesPlot>::getJointVelocities);
-}
+}*/
 
 
 

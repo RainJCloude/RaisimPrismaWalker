@@ -88,12 +88,26 @@ class VectorizedEnvironment {
       updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
+  void select_heightMap(){
+    for (auto *env: environments_)
+      env->select_heightMap();
+  }
+  
+
+  void select_terrain_from_tester(float stepHeight){
+		environments_[0]->select_terrain_from_tester(stepHeight);
+	}
+
   void getMotorTorques(Eigen::Ref<EigenVec> &tau){
     environments_[0]->getMotorTorques(tau);
 	}
 
   void getpTarget(Eigen::Ref<EigenVec> &pTarget){
     environments_[0]->getReference(pTarget);
+	}
+
+  void command_vel(const double omega_vel){
+    environments_[0]->command_vel(omega_vel);
 	}
 
   void getJointPositions(Eigen::Ref<EigenVec> &q){
@@ -303,7 +317,7 @@ class NormalSampler {
  
 
 template <class ChildEnvironment>
-struct GenCoordFetcher: public raisim::VectorizedEnvironment <ChildEnvironment>{
+struct GenCoordFetcher: public raisim::VectorizedEnvironment<ChildEnvironment>{
 
   /*GenCoordFetcher(ChildEnvironment* env)
   : raisim::VectorizedEnvironment<ChildEnvironment>::environments_(env){ //ChildEnvironment* env = environments_[0]
