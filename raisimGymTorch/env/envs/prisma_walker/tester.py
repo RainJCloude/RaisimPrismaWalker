@@ -168,12 +168,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-w', '--weight', help='trained weight path', type=str, default='')
     parser.add_argument('-v', '--velocity', nargs='+', help = 'command velocity for the quadruped', type=float, default = [0.0]) #nargs take more than 1 argument
+    parser.add_argument('-env', '--environment',  help='if the stairs spawn or not', type=bool, default=False)
+    parser.add_argument('-haaaa', '--stepHeight',  help='step height', type=float, default=[0.01])
 
     args = parser.parse_args()
 
     print(args.velocity)
     task_name = "prisma_walker_locomotion"
     # directories
+        
     task_path = os.path.dirname(os.path.realpath(__file__))
     home_path = task_path + "/../../../../.."
 
@@ -186,13 +189,16 @@ if __name__ == '__main__':
 
     env = VecEnv(RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)), cfg['environment'])
     env.command_vel(*args.velocity)
+    if(args.environment == True):
+        env.select_terrain_from_tester()
+        env.select_heightMap(*args.stepHeight)
 
     # shortcuts
     ob_dim = env.num_obs
     act_dim = env.num_acts
     control_dt = 0.01
 
-    weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/ang3/full_800.pt"
+    weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/a/full_400.pt"
 
     iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
     weight_dir = weight_path.rsplit('/', 1)[0] + '/'

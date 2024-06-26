@@ -58,6 +58,12 @@ class RaisimGymVecEnv:
     def stop_video_recording(self):
         self.wrapper.stopRecordingVideo()
 
+    def select_terrain_from_tester(self, stepHeight):
+        self.wrapper.select_terrain_from_tester(stepHeight)
+            
+    def select_heightMap(self):
+        self.wrapper.select_heightMap()
+
     def getError_vector(self):
         self.vector = self.wrapper.getError()
         return self.vector

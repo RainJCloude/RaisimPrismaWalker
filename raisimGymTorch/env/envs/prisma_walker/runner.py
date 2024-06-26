@@ -3,7 +3,6 @@ from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
 from raisimGymTorch.env.bin.prisma_walker import NormalSampler
 from raisimGymTorch.env.bin.prisma_walker import RaisimGymEnv
-from raisimGymTorch.env.RewardAnalyzer import RewardAnalyzer
 import os
 import math
 import time
@@ -67,7 +66,7 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
-tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -93,6 +92,9 @@ for update in range(1000000):
     reward_sum = 0
     done_sum = 0
     average_dones = 0.
+    env.select_heightMap()
+
+
 
     if update % cfg['environment']['eval_every_n'] == 0 and update!=0:
         print("Visualizing and evaluating the current policy")

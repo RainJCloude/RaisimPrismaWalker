@@ -88,6 +88,16 @@ class VectorizedEnvironment {
       updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
+  void select_heightMap(){
+    for (auto *env: environments_)
+      env->select_heightMap();
+  }
+  
+
+  void select_terrain_from_tester(float stepHeight){
+		environments_[0]->select_terrain_from_tester(stepHeight);
+	}
+
   void getMotorTorques(Eigen::Ref<EigenVec> &tau){
     environments_[0]->getMotorTorques(tau);
 	}

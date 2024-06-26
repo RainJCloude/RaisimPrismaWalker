@@ -17,31 +17,27 @@ environment:
   implicitIntegration: false
   reward:
     torque:
-      coeff: -0.001
+      coeff: -0.0005
     imitation:
-      coeff: 0.
-    slip:
-      coeff: -0.5
-    error_penalty:
-      coeff: -1
-    angular_penalty:
-      coeff: -1
-    dynamixel:
-      coeff: 0.5
-    dynamixel_joint_vel:
       coeff: 0.2
+    imitation_vel:
+      coeff: 0.1
+    slip:
+      coeff: -0.2
+    error_penalty:
+      coeff: -0.1
+    dynamixel:
+      coeff: 0.4
     Joint_velocity: 
       coeff: -0.04
     BodyMovementWithLateralFeet:
       coeff: -0.5
     ground_clearance:
-      coeff: 0.5
-    torque_limit:
-      coeff: 1
+      coeff: 3
 
 architecture:
-  policy_net: [128, 64, 32]
-  value_net: [64, 64]
+  policy_net: [512, 256, 128]
+  value_net: [128, 128, 128]
 
   
 
