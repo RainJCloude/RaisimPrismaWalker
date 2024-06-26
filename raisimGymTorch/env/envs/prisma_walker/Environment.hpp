@@ -467,7 +467,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		rewards_.record("error_penalty", error_penalty_);
 		rewards_.record("imitation", curr_imitation_*std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_)));		
 
-		rewards_.record("dynamixel", std::exp(-2*( std::abs(error_m3_)*(1/(0.2*0.2)) )));
+		rewards_.record("dynamixel", std::exp(-2*( std::abs(error_m3_)*(1/(0.3*0.3)) )));
 		rewards_.record("slip", slip_term_);
 		rewards_.record("ground_clearance", clearance_foot_);
 		if(cF_["center_foot"] == 0)
@@ -558,7 +558,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 		//clearance
 		if(bodyFootPos_[0] >= projectedCenterOfMass){
 			curr_imitation_ = 0.5;
-			std::cout<<"hei"<<std::endl;
 			if(previous_height_ > footPosition_[2]){ //rising phase
 				clearance_foot_ = std::abs(previous_height_);	
 			}
