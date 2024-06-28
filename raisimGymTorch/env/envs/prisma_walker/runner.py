@@ -61,6 +61,14 @@ actor = ppo_module.Actor(ppo_module.MLP(cfg['architecture']['policy_net'], nn.Le
                                                                            NormalSampler(act_dim),
                                                                            cfg['seed']),
                          device)
+
+num_seq = cfg['environment']['num_seq']
+
+actor = ppo_module.ActorRnn(cfg['architecture']['policy_net'], ob_dim, act_dim, env.num_envs, num_seq, 
+                            ppo_module.MultivariateGaussianDiagonalCovariance(act_dim, env.num_envs, 1.0, NormalSampler(act_dim),
+                            cfg['seed']),
+                            device)
+
 critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.LeakyReLU, ob_dim, 1, env.num_envs),
                            device)
 

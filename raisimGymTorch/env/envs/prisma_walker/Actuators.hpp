@@ -36,7 +36,7 @@ class Actuators {
 Actuators(){
 };
 
-void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bool visualizable_)
+void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bool visualizable_, int numJointsControlled)
 {			
 	portHandler_ = dynamixel::PortHandler::getPortHandler(deviceName);
 	packetHandler_ = dynamixel::PacketHandler::getPacketHandler(protocolVersion);
@@ -102,8 +102,9 @@ void initHandlersAndGroup(bool & ActuatorConnected, int num_pos, int num_vel, bo
 		//inputs for the RL policy: there is misalignment between the
 		//proprioceptive state and the visual observation in the real
 		//robot
-		joint_history_pos_.setZero(num_pos*2);
-		joint_history_vel_.setZero(num_vel*2);
+		numJointsControlled_ = numJointsControlled;
+		joint_history_pos_.setZero(num_pos*numJointsControlled);
+		joint_history_vel_.setZero(num_vel*numJointsControlled);
 		
 		int dxl_comm_result = packetHandler_->write1ByteTxRx(portHandler_, dxl_id, addrTorqueEnable, TorqueEnable, &dxl_error_);
 	}
@@ -267,11 +268,11 @@ Eigen::VectorXd getFeedback(const bool usePrivileged, const double m1Pos, const 
 
 void updateJointHistory(Eigen::Vector3d motor_pos, Eigen::Vector3d motor_vel){
 	
-	joint_history_pos_.head(joint_history_pos_.size() - 2) = joint_history_pos_.tail(joint_history_pos_.size() - 2);
-	joint_history_vel_.head(joint_history_vel_.size() - 2) = joint_history_vel_.tail(joint_history_vel_.size() - 2);
+	joint_history_pos_.head(joint_history_pos_.size() - numJointsControlled_) = joint_history_pos_.tail(joint_history_pos_.size() - numJointsControlled_);
+	joint_history_vel_.head(joint_history_vel_.size() - numJointsControlled_) = joint_history_vel_.tail(joint_history_vel_.size() - numJointsControlled_);
 	
-	joint_history_pos_.tail(2) = motor_pos.head(2);
-	joint_history_vel_.tail(2) = motor_vel.head(2);
+	joint_history_pos_.tail(numJointsControlled_) = motor_pos.head(numJointsControlled_);
+	joint_history_vel_.tail(numJointsControlled_) = motor_vel.head(numJointsControlled_);
 }
 
 void checkMotors(){};
@@ -298,7 +299,7 @@ Eigen::Vector3d bodyAngularVel_;
 
 Eigen::VectorXd joint_history_pos_;
 Eigen::VectorXd joint_history_vel_;
-
+int numJointsControlled_ = 0;
 int num_pos_;
 int num_vel_;
 

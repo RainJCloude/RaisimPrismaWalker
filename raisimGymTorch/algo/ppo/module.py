@@ -2,7 +2,7 @@ import torch.nn as nn
 import numpy as np
 import torch
 from torch.distributions import Normal
-
+from .rnn import RNNMonopod
 
 class Actor:
     def __init__(self, architecture, distribution, device='cpu'):
@@ -16,7 +16,6 @@ class Actor:
         self.action_mean = None
     
     def sample(self, obs):
-
         self.action_mean = self.architecture.architecture(obs).cpu().numpy()
         #print("obs: ", obs[0,:])
         #print("action mean: ", self.action_mean)
@@ -55,16 +54,22 @@ class Actor:
 
 
 class ActorRnn(Actor):
-    def __init__(self, architecture, distribution, device='cpu'):
-        super(ActorRnn, self).__init__(architecture, distribution, device=device)
-
+    def __init__(self, shape, input_size, output_size, num_envs, num_seq, distribution, device='cpu'):
+        self.num_seq = num_seq
+        self.architecture = RNNMonopod(shape, input_size, output_size, num_envs)
+        self.distribution = distribution
+        self.architecture.to(device)
+        self.distribution.to(device)
+        self.device = device
+        self.action_mean = None
 
     def sample(self, obs):
         #compute logit
         "obs is (num_envs, num_obs)"
-        obs.reshape(obs[0], num_seq, -1) #(batch, Lenght, input_size)
-        h0 = torch.zeros(1, obs[0], shape[0]) #need a forward method
-        self.action_mean = self.architecture.architecture(obs).cpu().numpy()
+        print(obs)
+        obs = obs[:,-1].reshape(obs.shape[0], self.num_seq_pos, -1)
+        print(obs)
+        self.action_mean = self.architecture(obs).cpu().numpy()
         #print("obs: ", obs[0,:])
         #print("action mean: ", self.action_mean)
 
