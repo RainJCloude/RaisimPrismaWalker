@@ -67,15 +67,17 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
 
+tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
               num_envs=cfg['environment']['num_envs'],
               num_transitions_per_env=n_steps,
-              num_learning_epochs=4,
-              gamma=0.996,
-              lam=0.95,
-              num_mini_batches=4,
+              num_learning_epochs=3,
+              gamma=0.998,
+              lam=0.97,
+              num_mini_batches=5,
               device=device,
               log_dir=saver.data_dir,
               shuffle_batch=False,

@@ -198,7 +198,7 @@ if __name__ == '__main__':
     act_dim = env.num_acts
     control_dt = 0.01
 
-    weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/b/full_600.pt"
+    weight_path = "/home/claudio/raisim_ws/raisimlib/raisimGymTorch/data/prisma_walker/a1/full_8600.pt"
 
     iteration_number = weight_path.rsplit('/', 1)[1].split('_', 1)[1].rsplit('.', 1)[0]
     weight_dir = weight_path.rsplit('/', 1)[0] + '/'

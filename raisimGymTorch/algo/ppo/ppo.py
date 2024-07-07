@@ -15,12 +15,12 @@ class PPO:
                  num_transitions_per_env,
                  num_learning_epochs,
                  num_mini_batches,
-                 clip_param=0.2,
+                 clip_param=0.25,
                  gamma=0.998,
                  lam=0.95,
                  value_loss_coef=0.5,
-                 entropy_coef=0.01,
-                 learning_rate=3e-5, #2e-6
+                 entropy_coef=0.0,
+                 learning_rate=3e-3, #2e-6
                  max_grad_norm=0.5,
                  learning_rate_schedule='adaptive',
                  desired_kl=0.01,
@@ -105,6 +105,7 @@ class PPO:
     def _train_step(self, log_this_iteration):
         mean_value_loss = 0
         mean_surrogate_loss = 0
+        epochLoss = 0
         for epoch in range(self.num_learning_epochs):
             for actor_obs_batch, critic_obs_batch, actions_batch, old_sigma_batch, old_mu_batch, current_values_batch, advantages_batch, returns_batch, old_actions_log_prob_batch \
                     in self.batch_sampler(self.num_mini_batches):
@@ -137,7 +138,6 @@ class PPO:
                 surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
                                                                                    1.0 + self.clip_param)
                 surrogate_loss = torch.max(surrogate, surrogate_clipped).mean()
-
                 # Value function loss
                 if self.use_clipped_value_loss:
                     value_clipped = current_values_batch + (value_batch - current_values_batch).clamp(-self.clip_param,
@@ -159,6 +159,8 @@ class PPO:
                 if log_this_iteration:
                     mean_value_loss += value_loss.item()
                     mean_surrogate_loss += surrogate_loss.item()
+            
+            epochLoss = mean_value_loss/self.num_mini_batches
 
         if log_this_iteration:
             num_updates = self.num_learning_epochs * self.num_mini_batches

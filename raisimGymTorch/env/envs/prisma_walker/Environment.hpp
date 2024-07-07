@@ -109,7 +109,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 		prisma_walker->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
 		/// MUST BE DONE FOR ALL ENVIRONMENTS
-		obDim_ = historyPosLength_ + historyVelLength_ + 3 + 1;
+		obDim_ = 3 + 3 + 3 + 3;
 		int privileged_obs_dim = 6 + 3;
 		//pitch + yaw + bodyLinearVel + bodyAngularVel + currentImitationError + bodyHeight + footState
 		//+nextMotorPos	
@@ -148,7 +148,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 		num_episode_ = 0;
 		actual_step_ = 0;
 	 	clearance_foot_ = 0.0; 
-		angular_command_ = 0.0;
+		footSlip_ = 0;
+		angular_command_ = 0.0; 
 		curr_imitation_ = 0.5;
 
 		terrainType_ = TerrainType::Flat;
@@ -183,6 +184,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		nonLinearTerms = Eigen::Vector3d::Zero();
 		nonLinearTerms_vecDyn_.setZero(gvDim_);
+
+		prisma_walker->getFrameVelocity(foot_center_, Footvel_);
+		angular_command_ = 0;
+		footVelocityRef_ = 0;
 	}
 
 	void openFile(){
@@ -329,7 +334,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 	void select_heightMap(){
 		bool stair = rn_.intRand(0,1);
 		
-		if((num_episode_ >20000 && stair) || (boost::iequals(select_terrain_from_tester_, "stairs"))) {
+		if((num_episode_ >500 && stair) || (boost::iequals(select_terrain_from_tester_, "stairs"))) {
 			terrainType_ = TerrainType::SingleStep;
 			RSINFO_IF(visualizable_, "stairs")
 			Singlestep(rn_.sampleUniform01()*stepHeight);
@@ -341,8 +346,6 @@ class ENVIRONMENT : public RaisimGymEnv {
 	}
 	void reset() final { 
 		
-		motorSpring_ = 20 + rn_.sampleUniform01()*180; //min and max of the spring coefficient
-
 		setFriction("ground");
 		previous_height_ = 0;
 		alfa_z_ = 0;
@@ -356,15 +359,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			gc_init_[9] = 0.7*rn_.sampleUniform();
 		}
 
-		nonLinearTerms_vecDyn_ = prisma_walker->getNonlinearities(world_->getGravity());
-		nonLinearTerms = nonLinearTerms_vecDyn_.e().tail(3);
-		
-		theta(0) = gc_init_[7] + (1/motorSpring_)*nonLinearTerms(0); 
-		theta(1) = gc_init_[8] + (1/motorSpring_)*nonLinearTerms(1);
-		theta(2) = gc_init_(9);	
 
-		dotTheta = Eigen::Vector3d::Zero();
-  
 		prisma_walker->setState(gc_init_, gv_init_);
 		updateObservation();
 		computedTorques.setZero();
@@ -378,15 +373,22 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 		pTarget3_ = action.cast<double>(); //dim=n_joints
 		pTarget3_ = pTarget3_.cwiseProduct(actionStd_);
-		actionMean_ << m1_pos_(index_imitation_), m2_pos_(index_imitation_), 0;
+		actionMean_ << 0, 0, 0;
 		pTarget3_ += actionMean_;
 		current_action_ = pTarget3_;
 
 		//std::cout<<"index imitation: "<<index_imitation_<<std::endl;
-		
-		if(!sea_included_){
 
-			motorTorque = 20*(pTarget3_ - gc_.tail(3)) - 2*gv_.tail(3);
+
+		motorTorque = 8*(pTarget3_ - gc_.tail(3)) - 0.8*gv_.tail(3);
+
+		linkTorque_.tail(3) = motorTorque;
+		computedTorques = prisma_walker->getGeneralizedForce().e().tail(3);
+
+
+		/*if(!sea_included_){
+
+			motorTorque = 8*(pTarget3_ - gc_.tail(3)) - 0.8*gv_.tail(3);
 
 			for(int i = 0; i< motorTorque.size(); i++){
 				motorTorque(i) = std::clamp(motorTorque[i], -gearRatio*7, gearRatio*7);
@@ -422,7 +424,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 			if(theta(0) >= 1.57 || theta(0) <= -1.57 || theta(1) >= 1.57 || theta(1) <= -1.57)
 				rewards_.record("Joint_positions", -1);
-		}
+		}*/
 	
 		if(implicitIntegration){
 			/*Try sinuois for motors
@@ -430,7 +432,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 			t+=control_dt_;
 			*/
 			/*Try open loop reference:
-			pTarget_.tail(3) << m1_pos_(index_imitation_), m2_pos_(index_imitation_), 0;
+			pTarget_.tail(3) << m1_pos_(mettiindiceIolotolgoPerhcé i commenti sono cosi), m2_pos_(pure), 0;
 			*/
 			pTarget_.tail(nJoints_) << pTarget3_;
 			prisma_walker->setPdTarget(pTarget_, vTarget_); //the inpit dimension of setPdTarget must be the DOF
@@ -467,19 +469,25 @@ class ENVIRONMENT : public RaisimGymEnv {
 		rewards_.record("error_penalty", error_penalty_);
 		rewards_.record("imitation", curr_imitation_*std::exp(-2*(1/sigma_square)*(error_m1_*error_m1_ + error_m2_*error_m2_)));		
 
-		rewards_.record("dynamixel", std::exp(-2*( std::abs(error_m3_)*(1/(0.3*0.3)) )));
-		rewards_.record("slip", slip_term_);
+		rewards_.record("velocityReward", std::exp(-2*(1/(0.3*0.3))*velocityReward_foot_or_body_));
+		rewards_.record("footSlip", footSlip_);
 		rewards_.record("ground_clearance", clearance_foot_);
-		if(cF_["center_foot"] == 0)
+
+		if(cF_["center_foot"] == 0){
 			rewards_.record("BodyMovementWithLateralFeet", bodyLinearVel_.squaredNorm() + bodyAngularVel_.squaredNorm());
-	
+			//rewards_.record("StretchedLeg", (gc_[8]*gc_[8]));
+		}
+
 		actual_step_++;	
 		if(actual_step_ == num_step){
 			gc_init_[7] = gc_[7];
 			gc_init_[8] = gc_[8];
 			gc_init_[9] = gc_[9];
+			gc_init_[0] = gc_[0];
+			gc_init_[1] = gc_[1];
+			gc_init_[2] = gc_[2];
 		}
-		//std::cout<<slip_term_<<std::endl;
+		//std::cout<<vel_foot_term_<<std::endl;
 
 		return rewards_.sum();
 		
@@ -487,7 +495,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	void incrementIndices(){
 
-		index_imitation_ += 1;
+		index_imitation_ += 2;
 		if(index_imitation_ >= traj_size){		
 			index_imitation_ = 0;
 		}
@@ -495,20 +503,18 @@ class ENVIRONMENT : public RaisimGymEnv {
 	
  
 	void imitation_function(){
-		if(sea_included_){
-			error_m1_ = theta(0) - m1_pos_(index_imitation_);
-			error_m2_ = theta(1) - m2_pos_(index_imitation_);
-		}else{
-			error_m1_ = gc_[7] - m1_pos_(index_imitation_);
-			error_m2_ = gc_[8] - m2_pos_(index_imitation_);
-		}	
-	}
- 
- 	void imitation_function_vel(){
-		error_m1_vel_ = gv_[6] - m1_vel_(index_imitation_);
-		error_m2_vel_ = gv_[7] - m2_vel_(index_imitation_);	
+		 
+		error_m1_ = gc_[7] - m1_pos_(index_imitation_);
+		error_m2_ = gc_[8] - m2_pos_(index_imitation_);
+		
 	}
 
+	void setPoint(){
+		error_m1_ = gc_[7] - m1_pos_(setPointIndex_);
+		error_m2_ = gc_[8] - m2_pos_(setPointIndex_);
+		
+	}
+ 
     void swapMatrixRows(Eigen::Matrix3d &mat){		
 		Eigen::Vector3d temp;
 		//riga x-> z
@@ -523,7 +529,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	void contacts(){
 		
-		prisma_walker->getFrameVelocity(foot_center_, vel_);
+		prisma_walker->getFrameVelocity(foot_center_, Footvel_);
 
 		cF_["center_foot"] = 0;
 		cF_["lateral_feet"] = 0;
@@ -534,7 +540,8 @@ class ENVIRONMENT : public RaisimGymEnv {
 			} 
 			if(contact.getlocalBodyIndex() == 0 ){  
 				cF_["lateral_feet"] = 1; 
-			}     
+			}
+			num_body_in_contact_ = contact.getPairObjectIndex();    
 			//std::cout<<world_->getObject(contact.getPairObjectIndex())<<std::endl; 
 		}
 
@@ -547,30 +554,35 @@ class ENVIRONMENT : public RaisimGymEnv {
 		orientationDisplacement = (orientationDisplacement*180)/M_PI;
 
 		//Slippage
-		slip_term_ = 0;
+		footSlip_ = 0;
+		double footVelocity_x = Footvel_[0]*Footvel_[0];
+		double footVelocity_y = Footvel_[1]*Footvel_[1];
 		if(cF_["center_foot"] == 1){
-			slip_term_ = std::sqrt(vel_[0]*vel_[0] + vel_[1]*vel_[1]);
+			footSlip_ = footVelocity_x + footVelocity_y;
 			previous_height_ = 0;
-			//angular reward
-			//error_m3_ = orientationDisplacement;
+			velocityReward_foot_or_body_ = std::abs(bodyAngularVel_[2] - angular_command_);
 		}
+		else{
+			velocityReward_foot_or_body_ = std::abs(Footvel_[0] - footVelocityRef_);
+		}
+
 		
 		//clearance
 		if(bodyFootPos_[0] >= projectedCenterOfMass){
-			curr_imitation_ = 0.5;
+			curr_imitation_ = 3;
 			if(previous_height_ > footPosition_[2]){ //rising phase
 				clearance_foot_ = std::abs(previous_height_);	
 			}
 			else{
 				previous_height_ = footPosition_[2];
-				curr_fact = 2;
 			}
 		}
 		else{
-			curr_imitation_ = 1;
+			curr_imitation_ = 0.5;
 		} 
 
 	} 
+
 
 	inline void computeSwingTime(){
 
@@ -589,22 +601,9 @@ class ENVIRONMENT : public RaisimGymEnv {
 
 	void updateObservation() {
 		
-		std::vector<double> nextMotorPos;
-		int indexToIncrease = index_imitation_;
-		for(int i = 0; i<5; i++){
-			indexToIncrease ++;
-			if(indexToIncrease> traj_size)
-				indexToIncrease = indexToIncrease - traj_size;
-			nextMotorPos.push_back(m1_pos_(indexToIncrease));
-			nextMotorPos.push_back(m2_pos_(indexToIncrease));
-		}
-		
-		Eigen::Map<Eigen::VectorXd> nextMotorValues(nextMotorPos.data(), nextMotorPos.size());
-
-		//Il giunto di base e' fisso rispetto alla base. Quindi l'orientamento della base e' quello del motore 
-		if(ActuatorConnected_){ 	//If motors are not connected you get a seg fault om the sendRequest
-			Eigen::VectorXd obs_motors = motors->getFeedback(false, m1_pos_(index_imitation_), m2_pos_(index_imitation_));
- 			obDouble_ << obs_motors;
+ 		if(ActuatorConnected_){ 	//If motors are not connected you get a seg fault om the sendRequest
+			//Eigen::VectorXd obs_motors = motors->getFeedback(false, m1_pos_(index_imitation_), m2_pos_(index_imitation_));
+ 			//obDouble_ << obs_motors;
 		}else{
 			prisma_walker->getState(gc_, gv_);//generalized coordinate generalized velocity wrt initial coordinate gc_init
 			
@@ -643,10 +642,10 @@ class ENVIRONMENT : public RaisimGymEnv {
 				current_action_,
 				angular_command_;
 			else
-				obDouble_<<joint_history_pos_,
-					joint_history_vel_,
+				obDouble_<<gc_.tail(3),
+					gv_.tail(3),
 					current_action_,
-					angular_command_;
+					bodyAngularVel_;
 		}
 	}
  
@@ -709,9 +708,9 @@ class ENVIRONMENT : public RaisimGymEnv {
 		alfa_z_ = acos(z_vec.dot(z_axis));
 		alfa_z_ = (alfa_z_*180)/M_PI;
 		 
-		if (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > 3*sigma || alfa_z_>18){
+		if (std::sqrt(error_m1_*error_m1_ + error_m2_*error_m2_) > 3*sigma || alfa_z_>20){
 			fallCount_++;
-			index_imitation_ -= 10;
+			index_imitation_ -= 100;
 			if(index_imitation_ < 0){
 				index_imitation_ = std::abs(index_imitation_ - traj_size);
 			}
@@ -728,10 +727,15 @@ class ENVIRONMENT : public RaisimGymEnv {
 	}
 
 void curriculumUpdate() {
-
-		if(cF_["center_foot"] == 0)
-			angular_command_ = rn_.sampleUniform()*0.7;
 		
+		angular_command_ = rn_.sampleUniform()*0.2;
+		footVelocityRef_ = rn_.sampleUniform()*0.5;
+		indexIncrement_ = rn_.intRand(1,10);
+		setPointIndex_ = traj_size*rn_.sampleUniform01();
+		
+		RSINFO_IF(visualizable_, "angular velocity reference: "<<angular_command_);
+		RSINFO_IF(visualizable_, "Linear foot velocity reference: "<<footVelocityRef_);
+
 		if(terrainType_ == TerrainType::SingleStep)
 			world_->removeObject(terrain_);
 
@@ -752,15 +756,19 @@ void curriculumUpdate() {
 				for(int i = 0; i < gvDim_; i++){
 					currRand_jointVel_[i] += 0.001;
 				}
-				stepHeight = std::pow(stepHeight, curriculumDecayFactor_);
-				curriculumDecayFactor_ = std::clamp(curriculumDecayFactor_ - 0.00025, 0.98, 0.99);
+				if(num_body_in_contact_ == 2){
+					stepHeight = std::pow(stepHeight, curriculumDecayFactor_);
+					curriculumDecayFactor_ = std::clamp(curriculumDecayFactor_ - 0.00025, 0.98, 0.99);
+				}
 			}
 			else{
-				stepHeight = 0.992*std::pow(10, 1/curriculumDecayFactor_*log10(stepHeight));
-				curriculumDecayFactor_ = std::clamp(curriculumDecayFactor_ + 0.00025, 0.98, 0.99);
+				if(num_body_in_contact_ == 2){
+					stepHeight = 0.992*std::pow(10, 1/curriculumDecayFactor_*log10(stepHeight));
+					curriculumDecayFactor_ = std::clamp(curriculumDecayFactor_ + 0.00025, 0.98, 0.99);
+				}
 				reduceRand();
 			}
-
+			RSINFO_IF(visualizable_, "stepHeight = "<<stepHeight)
 			currRand_jointPos_ = currRand_jointPos_.cwiseMax(Eigen::VectorXd::Zero(gcDim_));
 			currRand_jointPos_ = currRand_jointPos_.cwiseMin(Eigen::VectorXd::Constant(gcDim_, 0.5));
 			currRand_jointVel_ = currRand_jointVel_.cwiseMax(Eigen::VectorXd::Zero(gvDim_));
@@ -880,17 +888,16 @@ void curriculumUpdate() {
 		
 		double stepwidth = 0.2;
 		double stepsize = stepwidth/pixelSize_;
-		mapMat.setConstant(0.001);
-		
-		mapMat.block(stepwidth/pixelSize_, stepwidth/pixelSize_, terrainProp_.xSamples - 2*stepsize , terrainProp_.ySamples - 2*stepsize).setConstant(single_height); 
-		mapMat.block(2*stepwidth/pixelSize_, 2*stepwidth/pixelSize_, terrainProp_.xSamples - 4*stepsize , terrainProp_.ySamples - 4*stepsize).setConstant(2*single_height); 
-		
-		
+		mapMat.setConstant(single_height);
+		mapMat.block(stepwidth/pixelSize_, stepwidth/pixelSize_, terrainProp_.xSamples - 2*stepsize , terrainProp_.ySamples - 2*stepsize).setConstant(2*single_height); 
+		mapMat.col(mapMat.cols() - 1).setConstant(0);
+		mapMat.row(0).setConstant(0);
+
       	terrain_ = world_->addHeightMap(terrainProp_.xSamples,
                                     terrainProp_.ySamples,
                                     terrainProp_.xSize,
                                     terrainProp_.ySize,
-                                    prisma_walker_pos[0] + 1.2, 0.0, heights_, "ground_heightMap");  //ground is the name of the material, useful to set the friction
+                                    prisma_walker_pos[0] + 1.1, 0.0, heights_, "ground_heightMap");  //ground is the name of the material, useful to set the friction
 		setFriction("ground_heightMap");
 	}
 
@@ -902,7 +909,7 @@ void curriculumUpdate() {
 		Eigen::VectorXd m2_pos_, m2_vel_;
  
 		raisim::Mat<3,3> rot_randomized_;
- 
+ 		raisim::Mat<3,3> footOrientation_; 
 		Eigen::VectorXd filtered_acc_ = Eigen::VectorXd::Zero(3);
  
  		Eigen::Quaternionf q_;
@@ -918,7 +925,7 @@ void curriculumUpdate() {
 		raisim::Mat<3,3> rot_;
 		size_t foot_center_;
 		raisim::Vec<3> prisma_walker_pos;
-		raisim::Vec<3> vel_, footPosition_;
+		raisim::Vec<3> Footvel_, footPosition_;
 
 		/// these variables are not in use. They are placed to show you how to create a random number sampler.
 		std::normal_distribution<double> normDist_;
@@ -926,10 +933,10 @@ void curriculumUpdate() {
 		Actuators *motors;
 		std::shared_ptr<Actuators> hebiMotor_;
 
-		double slip_term_;
+		double vel_foot_term_;
 		double previous_height_, max_height_, clearance_foot_ = 0;
 		bool max_clearence_ = false;
-		double angular_command_;
+		double angular_command_ = 0, footVelocityRef_ = 0;
 		std::string select_terrain_from_tester_ = "niente";
 
 		std::chrono::duration<double, std::milli> swing_time_; 
@@ -946,13 +953,15 @@ void curriculumUpdate() {
 		double curr_imitation_, motorSpring_; 
 		bool fallen_ = false;
 		int actual_step_;
-		double error_m1_ = 0, error_m2_ = 0, error_m3_ = 0, error_m1_vel_ = 0, error_m2_vel_ = 0, error_m1_obs_ = 0, error_m2_obs_ = 0;
+		double error_m1_ = 0, error_m2_ = 0, error_m1_vel_ = 0, error_m2_vel_ = 0, error_m1_obs_ = 0, error_m2_obs_ = 0;
+		double velocityReward_foot_or_body_ = 0;
+
 		const float sigma = 0.6;
 		float sigma_square = sigma*sigma;
 		Eigen::VectorXd nextMotorPositions_;
 		const int traj_size = 1818;
 		bool ActuatorConnected_ = false;
-		int curr_fact = 1;
+		int curr_clearance_ = 1;
 		float error_penalty_ = 0;
 		int projectedCenterOfMass = 0;
 		float curr_fact_slip_ = 1;
@@ -984,10 +993,10 @@ void curriculumUpdate() {
 		float stepHeight_ = 0.0;
 		std::vector<double> m1_stdvector_;
 		std::vector<double> m2_stdvector_;
-		
+		int num_body_in_contact_ = 0;
 		int numJointsControlled = 0;
-		double angular_command_vel = 0.0;
-
+		double footOrientationPenalty_;
+		double footSlip_ = 0;
 
 		//step:
 		std::vector<double> heights_;
@@ -995,8 +1004,9 @@ void curriculumUpdate() {
         raisim::TerrainProperties terrainProp_;
 		float stepHeight = 0.001;
 		double curriculumDecayFactor_ = 0.98;
-	    raisim::TerrainType terrainType_;            //TerrainType is not a class, but an enumerator
-
+	    raisim::TerrainType terrainType_;     	       //TerrainType is not a class, but an enumerator
+		int indexIncrement_ = 0;
+		int setPointIndex_ = 0;
 
 	protected:
 		Eigen::VectorXd gc_, gv_, ga_, pTarget_;
