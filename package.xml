@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>arm_description</name>
+  <name>arm_dynamixel</name>
   <version>0.0.0</version>
-  <description>The arm_description package</description>
+  <description>The arm_dynamixel package</description>
   <license>TODO: License declaration</license>
   
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
@@ -12,7 +12,7 @@
   <maintainer email="mario.selvaggio@unina.it">mrslvg</maintainer>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-  
+
   <depend>hardware_interface</depend>
   <depend>pluginlib</depend>
   <depend>controller_manager</depend>

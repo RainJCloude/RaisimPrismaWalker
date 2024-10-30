@@ -6,6 +6,14 @@
     <color rgba="1 0 0 1"/>
   </material>
 
+  <link name="world"/>
+
+  <joint name="world_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+
+  </joint> 
 
   <link name="base_link">
     <visual>
@@ -13,7 +21,6 @@
         <mesh filename="package://arm_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <material name="red"/>
     </visual>
     <collision>
       <geometry>
@@ -48,7 +55,7 @@
     </collision>   
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="1.35223008e+07" ixy="0.0" ixz="0.0" iyy="8.13814925e+06" iyz="0.0" izz="2.14903814e+07"/>
+      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
     </inertial>
   </link>
  
@@ -64,8 +71,7 @@
     <visual>
       <geometry>
         <mesh filename="package://arm_description/meshes/base_turn_table_rot.stl" scale="0.001 0.001 0.001"/>
-      </geometry>
-    
+      </geometry>  
     </visual>
     <collision>
       <geometry>
@@ -73,10 +79,9 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -91,7 +96,6 @@
       <geometry>
         <mesh filename="package://arm_description/meshes/dyn.stl" scale="0.01 0.01 0.01"/>
       </geometry>
-      
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </visual>
     <collision>
@@ -102,7 +106,7 @@
     </collision>
      <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -111,13 +115,12 @@
     <child link="dyn2_r"/>
     <origin xyz="0 0 0.0" rpy="0 0 0"/>
     <axis xyz="0 0 1" />
-    <limit effort="300" velocity="0.1" lower="-3.14" upper="3.14"/>
+    <limit effort="20" velocity="0.1" lower="-1.57" upper="1.57"/>
   </joint>
   
   <link name="dyn2_r">
     
   </link>
-
   <joint name="dyn2_f4" type="fixed">
     <parent link="dyn2_r"/>
     <child link="f4"/>
@@ -142,7 +145,7 @@
     </collision>
      <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -167,7 +170,7 @@
     </collision>
      <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -205,10 +208,10 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-  <inertia ixx="0.001" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.001"/>    </inertial>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
+      </inertial>
   </link>
   
   <joint name="f5_dyn4" type="fixed">
@@ -222,7 +225,6 @@
       <geometry>
         <mesh filename="package://arm_description/meshes/dyn.stl" scale="0.01 0.01 0.01"/>
       </geometry>
-      
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </visual>
     <collision>
@@ -231,10 +233,9 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -247,7 +248,6 @@
   </joint>
   
   <link name="dyn4_r">
-    
   </link>
   
   <joint name="f5_wrist" type="fixed">
@@ -272,10 +272,9 @@
       </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
      <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -298,10 +297,9 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
  
@@ -314,7 +312,6 @@
   </joint>
   
   <link name="dyn5_r">
-    
   </link>
   
   <joint name="wrist_rotate_dyn5" type="fixed">
@@ -339,10 +336,9 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
     
@@ -368,10 +364,9 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
   
@@ -398,10 +393,9 @@
         </geometry>
       <origin rpy="0 0 0" xyz="0 0 0"/>
     </collision>
-    
     <inertial>
       <mass value="0.1"/>
-      <inertia ixx="6.90013881e-05" ixy="0.0" ixz="0.0" iyy="1.24554875e-04" iyz="0.0" izz="1.04295793e-04"/>
+      <inertia ixx="6.90013881e-06" ixy="0.0" ixz="0.0" iyy="1.24554875e-05" iyz="0.0" izz="1.04295793e-05"/>
     </inertial>
   </link>
 
@@ -474,57 +468,26 @@
     <material>Gazebo/Red</material>
   </gazebo>   
 
-  <gazebo> 
-    <plugin filename="ign_ros2_control-system" name="ign_ros2_control::IgnitionROS2ControlPlugin">
-    <parameters>$(find arm_description)/config/pos_controller.yaml</parameters>
-    <controller_manager_prefix_node_name>controller_manager</controller_manager_prefix_node_name>
-    </plugin>
-  </gazebo>
-
-
-  <xacro:include filename="$(find arm_description)/urdf/ros2_control/joint_initial_pos.xacro"/>
+ 
+  <xacro:include filename="$(find arm_dynamixel)/urdf/ros2_control/joint_initial_pos.xacro"/>
 
   <xacro:arg name="pos_j2" default="2.0"/>
 
 <!--Install with sudo apt install ros-humble-ign-ros2-control-->
-<ros2_control name="IgnitionSystem" type="system">
+<ros2_control name="DynamixelHardwareInterface" type="system">
 
-  <hardware>
-    <plugin>ign_ros2_control/IgnitionSystem</plugin> 
-  </hardware>
+   <hardware>
+        <plugin>dynamixel_hardware/DynamixelHardware</plugin>
+        <param name="usb_port">/dev/ttyUSB0</param>
+        <param name="baud_rate">1000000</param>
+        <!-- <param name="use_dummy">true</param> -->
+    </hardware>
       
-  <xacro:joint_ros2_control name="j0" initial_pos="0.0"/>   
-  <xacro:joint_ros2_control name="j1" initial_pos="0.0"/>   
-  <xacro:joint_ros2_control name="j2" initial_pos="2.0"/>   
-  <xacro:joint_ros2_control name="j3" initial_pos="0.0"/>   
+  <xacro:joint_ros2_control name="j0" id="1"/>   
+  <xacro:joint_ros2_control name="j1" id="2"/>   
+  <xacro:joint_ros2_control name="j2" id="3"/>   
+  <xacro:joint_ros2_control name="j3" id="4"/>  
+
 </ros2_control>
  
- <gazebo>
-	  <plugin filename="gz-sim-sensors-system"
-		name="gz::sim::systems::Sensors">
-		<render_engine>ogre2</render_engine>
-	</plugin>
-  </gazebo>
-
-  <gazebo reference="camera_link">
-  <sensor name="camera" type="camera">
-    <camera>
-      <horizontal_fov>1.047</horizontal_fov>
-      <image>
-        <width>320</width>
-        <height>240</height>
-      </image>
-      <clip>
-        <near>0.1</near>
-        <far>100</far>
-      </clip>
-    </camera>
-    <always_on>1</always_on>
-    <update_rate>30</update_rate>
-    <visualize>true</visualize>
-    <topic>camera</topic>
-  </sensor>
-</gazebo>
-
-
 </robot>

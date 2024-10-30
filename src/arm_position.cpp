@@ -111,6 +111,16 @@ int main(int argc, char * argv[])
 			rclcpp::spin_some(node);
 	}
 
+	//attento che dentro spin_some ci va l'istanza della classe, in spin() ci può andare il std::make_shared<class>()
+	//La differenza è che in spin_some cerca se può lanciare una callback, e poi va avanti con il codice
+	//per questo sta nei while.
+	//Spin invece è BLOCCANTE quindi cerca continuamente se arrivano callback
+	//per questo motivo puoi fare:
+	//rclcpp::spin(std::make_shared<class>()) -> perché qui chiama il costruttore e si BLOCCA in attesa di callback
+	//rcpcpp:spin_some() non si blocca. Se ci mettessi di nuovo std::make_shared<class>() chiamerebbe ogni volta il costruttore
+	//per farlo funzionare, e bloccare sulle callback della classe, devo metterci l'istanza della classe, quindi dichiaro prima il nodo (istanziandolo)
+	//e poi lo passo
+
 
 	rclcpp::shutdown();
 
